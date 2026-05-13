@@ -34,9 +34,8 @@ function _loadStoredConfig() {
 
 function _applyStoredConfig() {
   const saved = _loadStoredConfig();
-  if (saved.goloka_url)       CONFIG.GOLOKA_URL            = saved.goloka_url;
-  if (saved.write_key)        CONFIG.SANKIRTAN_WRITE_KEY   = saved.write_key;
-  if (saved.devotee_sheet_url) CONFIG.DEVOTEE_SHEET_CSV_URL = saved.devotee_sheet_url;
+  if (saved.goloka_url) CONFIG.GOLOKA_URL          = saved.goloka_url;
+  if (saved.write_key)  CONFIG.SANKIRTAN_WRITE_KEY = saved.write_key;
 }
 
 // ── Sprae state ────────────────────────────────────────────
@@ -83,13 +82,10 @@ export const state = sprae(document.body, {
   lastDevotee:         '',
 
   // Admin
-  adminGoloka:      '',
-  adminWriteKey:    '',
-  adminDevoteeSheet: '',
-  connStatus:       '',
-  connClass:        '',
-  sheetStatus:      '',
-  sheetClass:       '',
+  adminGoloka:   '',
+  adminWriteKey: '',
+  connStatus:    '',
+  connClass:     '',
 
   // UI
   isOffline:    false,
@@ -134,8 +130,8 @@ export const state = sprae(document.body, {
     this.filteredDevotees = Catalog.filterDevotees(this.devoteeSearch);
   },
 
-  async selectDevotee(name) {
-    this.selectedDevotee = name;
+  async selectDevotee(devotee) {
+    this.selectedDevotee = devotee.spiritual_name || devotee.name;
     this.goto('books');
 
     // Refresh book groups (reload if bookGroups is empty)
@@ -345,28 +341,23 @@ export const state = sprae(document.body, {
   // ── Admin ──────────────────────────────────────────────
 
   gotoAdmin() {
-    const saved           = _loadStoredConfig();
-    this.adminGoloka      = saved.goloka_url       || CONFIG.GOLOKA_URL            || '';
-    this.adminWriteKey    = saved.write_key         || CONFIG.SANKIRTAN_WRITE_KEY   || '';
-    this.adminDevoteeSheet = saved.devotee_sheet_url || CONFIG.DEVOTEE_SHEET_CSV_URL || '';
-    this.connStatus       = '';
-    this.connClass        = '';
-    this.sheetStatus      = '';
-    this.sheetClass       = '';
+    const saved        = _loadStoredConfig();
+    this.adminGoloka   = saved.goloka_url || CONFIG.GOLOKA_URL          || '';
+    this.adminWriteKey = saved.write_key  || CONFIG.SANKIRTAN_WRITE_KEY || '';
+    this.connStatus    = '';
+    this.connClass     = '';
     this.goto('admin');
   },
 
   saveAdmin() {
     const cfg = {
-      goloka_url:        this.adminGoloka.trim(),
-      write_key:         this.adminWriteKey.trim(),
-      devotee_sheet_url: this.adminDevoteeSheet.trim(),
+      goloka_url: this.adminGoloka.trim(),
+      write_key:  this.adminWriteKey.trim(),
     };
     try { localStorage.setItem(CONFIG.STORAGE_KEYS.CONFIG, JSON.stringify(cfg)); }
     catch (_) {}
-    CONFIG.GOLOKA_URL            = cfg.goloka_url;
-    CONFIG.SANKIRTAN_WRITE_KEY   = cfg.write_key;
-    CONFIG.DEVOTEE_SHEET_CSV_URL = cfg.devotee_sheet_url;
+    CONFIG.GOLOKA_URL          = cfg.goloka_url;
+    CONFIG.SANKIRTAN_WRITE_KEY = cfg.write_key;
     this.connStatus = '✓ Settings saved.';
     this.connClass  = 'success';
   },
@@ -387,33 +378,9 @@ export const state = sprae(document.body, {
     this.connClass  = ok ? 'success' : 'error';
   },
 
-  async testDevoteeSheet() {
-    const url = this.adminDevoteeSheet.trim();
-    if (!url) {
-      this.sheetStatus = 'Enter the sheet URL first.';
-      this.sheetClass  = 'error';
-      return;
-    }
-    this.sheetStatus = 'Testing…';
-    this.sheetClass  = 'loading';
-    try {
-      const resp = await fetch(url, { cache: 'no-store' });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const text  = await resp.text();
-      const lines = text.trim().split(/\r?\n/);
-      const count = Math.max(0, lines.length - 1);
-      this.sheetStatus = `✓ Connected — ${count} devotee(s) found`;
-      this.sheetClass  = 'success';
-    } catch (err) {
-      this.sheetStatus = `✗ ${err.message}`;
-      this.sheetClass  = 'error';
-    }
-  },
-
   // Input handlers for admin fields (so Sprae gets named methods)
-  onAdminGoloka(e)  { this.adminGoloka      = e.target.value; },
-  onAdminKey(e)     { this.adminWriteKey     = e.target.value; },
-  onAdminSheet(e)   { this.adminDevoteeSheet = e.target.value; },
+  onAdminGoloka(e) { this.adminGoloka   = e.target.value; },
+  onAdminKey(e)    { this.adminWriteKey = e.target.value; },
 
   // ── Toast ──────────────────────────────────────────────
 
@@ -429,10 +396,10 @@ export const state = sprae(document.body, {
   async init() {
     _applyStoredConfig();
 
-    // Load devotee list and books in parallel
+    // Load distributor list and books in parallel
     this.catalogLoading = true;
-    const [devoteeResult] = await Promise.all([
-      Catalog.loadDevotees(false),
+    const [distResult] = await Promise.all([
+      Catalog.loadDistributors(false),
       Catalog.loadBooks(false),
     ]);
     this.devotees         = Catalog.devotees;
@@ -440,8 +407,8 @@ export const state = sprae(document.body, {
     this.bookGroups       = Catalog.groupedBooks();
     this.catalogLoading   = false;
 
-    if (devoteeResult.source === 'empty') {
-      this.catalogNotice = 'No devotee sheet configured — go to Admin to add the CSV URL.';
+    if (distResult.source === 'empty') {
+      this.catalogNotice = 'Could not load devotee list — configure Goloka URL and Write Key in Admin.';
     }
 
     // Count pending submissions

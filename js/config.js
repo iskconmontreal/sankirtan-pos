@@ -1,14 +1,13 @@
 /* Sankirtan POS — Configuration */
 
 export const CONFIG = {
-  GOLOKA_URL:            'http://localhost:8080',
-  SANKIRTAN_WRITE_KEY:   '',
-  DEVOTEE_SHEET_CSV_URL: '',
-  STORE_NAME:            'ISKCON Montréal — Sankirtan',
+  GOLOKA_URL:          'http://localhost:8080',
+  SANKIRTAN_WRITE_KEY: '',
+  STORE_NAME:          'ISKCON Montréal — Sankirtan',
   STORAGE_KEYS: {
     CATALOG_CACHE:  'sankirtan_catalog_cache',
     DEVOTEES_CACHE: 'sankirtan_devotees_cache',
-    CONFIG:         'sankirtan_config',  // { goloka_url, write_key, devotee_sheet_url }
+    CONFIG:         'sankirtan_config',  // { goloka_url, write_key }
     PENDING:        'sankirtan_pending', // queued failed submissions
     RECENT:         'sankirtan_recent',  // last submitted sessions
   },

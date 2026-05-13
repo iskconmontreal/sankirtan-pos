@@ -53,6 +53,16 @@ export const DB = {
     return resp.json();
   },
 
+  // GET /api/sankirtan/distributors
+  async getDistributors() {
+    const resp = await fetch(`${_base()}/api/sankirtan/distributors`, {
+      headers: _headers(),
+      cache:   'no-store',
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    return resp.json();
+  },
+
   // Test connection: GET /api/sankirtan/books, return { ok, message }
   async testConnection() {
     try {

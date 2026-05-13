@@ -19,9 +19,8 @@ Open `http://localhost:8000`, tap **Admin** → paste your Goloka URL + write ke
 |---|---|
 | Goloka URL | e.g. `https://api.iskconmontreal.ca` |
 | Sankirtan Write Key | `SANKIRTAN_WRITE_KEY` from Goloka `.env` |
-| Devotee Sheet CSV URL | Google Sheet → File → Share → Publish to web → CSV |
 
-The Google Sheet must have a column named **Name** (one devotee per row).
+The devotee list is managed by the temple admin in Mandir (Users → assign the **Book Distributor** role).
 
 ## GitHub Pages
 

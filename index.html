@@ -75,13 +75,13 @@
 
       <ul class="devotee-list" :if="!catalogLoading && filteredDevotees.length > 0">
         <li class="devotee-row" :each="d in filteredDevotees" :onclick="selectDevotee(d)">
-          <span class="devotee-name" :text="d"></span>
+          <span class="devotee-name" :text="d.spiritual_name || d.name"></span>
           <span class="devotee-arrow">›</span>
         </li>
       </ul>
 
       <p class="empty-msg" :if="!catalogLoading && filteredDevotees.length === 0 && !devoteeSearch">
-        No devotees configured.<br>Add the Google Sheet URL in Admin.
+        No devotees configured.<br>Ask the temple admin to add you in Mandir.
       </p>
       <p class="empty-msg" :if="!catalogLoading && filteredDevotees.length === 0 && devoteeSearch">
         No devotee matches "<span :text="devoteeSearch"></span>".
@@ -284,23 +284,9 @@
           <div class="conn-status" :class="connClass" :if="connStatus" :text="connStatus"></div>
         </div>
 
-        <div class="admin-card">
-          <h3>Devotee List</h3>
-          <p class="admin-hint">
-            Paste the published CSV URL from your Google Sheet:
-            File → Share → Publish to web → CSV.
-            The sheet needs a column named "Name".
-          </p>
-          <label class="admin-label">Devotee Sheet CSV URL</label>
-          <input class="admin-url-input" type="url"
-                 placeholder="https://docs.google.com/spreadsheets/d/e/…/pub?output=csv"
-                 :value="adminDevoteeSheet" :oninput="onAdminSheet">
-          <div class="admin-row">
-            <button class="btn btn-sm btn-outline-dark" :onclick="saveAdmin()">Save</button>
-            <button class="btn btn-sm btn-outline-dark" :onclick="testDevoteeSheet()">Test Sheet</button>
-          </div>
-          <div class="conn-status" :class="sheetClass" :if="sheetStatus" :text="sheetStatus"></div>
-        </div>
+        <p class="admin-hint" style="margin-top:var(--s-sm);font-size:var(--f-xs);">
+          Devotee list is managed by the temple admin in Mandir (Users → Book Distributor role).
+        </p>
 
       </div>
     </section>

@@ -1,13 +1,13 @@
 /* Sankirtan POS — Catalog Module
    Books: fetched from Goloka API (with localStorage cache + sample fallback)
-   Devotees: fetched from Google Sheet CSV (with localStorage cache)
+   Devotees: fetched from GET /api/sankirtan/distributors (with localStorage cache)
 */
 
 import { CONFIG, SAMPLE_BOOKS, CATEGORY_LABELS, CATEGORY_POINTS, CATEGORY_ORDER } from './config.js';
 
 export const Catalog = {
   books:    [],
-  devotees: [],
+  devotees: [], // [{ id, name, spiritual_name, email }]
 
   // ── Books ────────────────────────────────────────────────
 
@@ -54,9 +54,9 @@ export const Catalog = {
     return { source: 'sample', count: Catalog.books.length };
   },
 
-  // ── Devotees ─────────────────────────────────────────────
+  // ── Distributors ──────────────────────────────────────────
 
-  async loadDevotees(force = false) {
+  async loadDistributors(force = false) {
     if (force) localStorage.removeItem(CONFIG.STORAGE_KEYS.DEVOTEES_CACHE);
 
     if (!force) {
@@ -68,19 +68,22 @@ export const Catalog = {
     }
 
     const cfg = Catalog._loadConfig();
-    const url = cfg.devotee_sheet_url || CONFIG.DEVOTEE_SHEET_CSV_URL;
+    const url  = cfg.goloka_url || CONFIG.GOLOKA_URL;
+    const key  = cfg.write_key  || CONFIG.SANKIRTAN_WRITE_KEY;
 
-    if (url) {
+    if (url && key) {
       try {
-        const resp = await fetch(url, { cache: 'no-store' });
+        const resp = await fetch(`${url}/api/sankirtan/distributors`, {
+          headers: { 'Authorization': `Bearer ${key}` },
+          cache:   'no-store',
+        });
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        const text = await resp.text();
-        const names = Catalog._parseDevoteeCSV(text);
-        Catalog.devotees = names;
-        Catalog._writeCache(CONFIG.STORAGE_KEYS.DEVOTEES_CACHE, names);
-        return { source: 'sheet', count: names.length };
+        const distributors = await resp.json();
+        Catalog.devotees = distributors;
+        Catalog._writeCache(CONFIG.STORAGE_KEYS.DEVOTEES_CACHE, distributors);
+        return { source: 'api', count: distributors.length };
       } catch (err) {
-        console.warn('[Catalog] Devotee sheet fetch failed:', err.message);
+        console.warn('[Catalog] Distributors fetch failed:', err.message);
         const cached = Catalog._readCache(CONFIG.STORAGE_KEYS.DEVOTEES_CACHE);
         if (cached) {
           Catalog.devotees = cached;
@@ -93,50 +96,14 @@ export const Catalog = {
     return { source: 'empty', count: 0 };
   },
 
-  _parseDevoteeCSV(text) {
-    const lines = text.trim().split(/\r?\n/);
-    if (lines.length < 2) return [];
-
-    const headers = Catalog._parseLine(lines[0]).map(h =>
-      h.trim().replace(/^﻿/, '').toLowerCase()
-    );
-
-    // Accept "name", "spiritual name", or "devotee" as the name column
-    const nameIdx = ['name', 'spiritual name', 'devotee', 'nom'].reduce((found, key) => {
-      if (found >= 0) return found;
-      return headers.indexOf(key);
-    }, -1);
-
-    const idx = nameIdx >= 0 ? nameIdx : 0;
-
-    const names = [];
-    for (let i = 1; i < lines.length; i++) {
-      const cols = Catalog._parseLine(lines[i]);
-      const name = (cols[idx] || '').trim();
-      if (name) names.push(name);
-    }
-    return names.sort((a, b) => a.localeCompare(b));
-  },
-
-  _parseLine(line) {
-    const fields = [];
-    let current  = '';
-    let inQuotes = false;
-
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i];
-      if (ch === '"') {
-        if (inQuotes && line[i + 1] === '"') { current += '"'; i++; }
-        else inQuotes = !inQuotes;
-      } else if (ch === ',' && !inQuotes) {
-        fields.push(current);
-        current = '';
-      } else {
-        current += ch;
-      }
-    }
-    fields.push(current);
-    return fields;
+  filterDevotees(query) {
+    const q = (query || '').toLowerCase().trim();
+    if (!q) return Catalog.devotees.slice();
+    return Catalog.devotees.filter(d => {
+      const display = (d.spiritual_name || d.name || '').toLowerCase();
+      const legal   = (d.name || '').toLowerCase();
+      return display.includes(q) || legal.includes(q);
+    });
   },
 
   // ── Grouped books ─────────────────────────────────────────
@@ -163,12 +130,6 @@ export const Catalog = {
             .map(b => ({ ...b, qty: 0 })),
         };
       });
-  },
-
-  filterDevotees(query) {
-    const q = (query || '').toLowerCase().trim();
-    if (!q) return Catalog.devotees.slice();
-    return Catalog.devotees.filter(d => d.toLowerCase().includes(q));
   },
 
   // ── localStorage helpers ────────────────────────────────
