@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#b04d1a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Sankirtan POS — ISKCON Montréal</title>
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- ═══════════════════ HEADER ═══════════════════ -->
+  <header id="app-header">
+    <div class="header-inner">
+      <div class="header-brand">
+        <button class="btn-back" :if="step !== 'landing'" :onclick="goBack()">←</button>
+        <div class="brand-text">
+          <h1>Sankirtan POS</h1>
+          <div class="header-subtitle">ISKCON Montréal</div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- offline notice -->
+  <div class="offline-banner" :if="isOffline">Offline — submission queued locally</div>
+
+  <!-- ═══════════════════ MAIN ═══════════════════ -->
+  <main id="app-main">
+
+    <!-- ───────────── STEP: LANDING ───────────── -->
+    <section class="step-section" :if="step === 'landing'">
+
+      <div class="landing-hero">
+        <div class="landing-date" :text="todayLabel"></div>
+        <h2 class="landing-title">Hare Krishna!</h2>
+        <p class="landing-tagline">Log your book distribution</p>
+        <button class="btn btn-primary btn-hero" :onclick="startSession()">
+          Start Session
+        </button>
+      </div>
+
+      <div class="pending-banner" :if="pendingCount > 0">
+        <div class="pending-text">
+          <strong :text="pendingCount + ' session(s) pending'"></strong>
+          <span>Could not reach Goloka</span>
+        </div>
+        <button class="btn btn-sm btn-outline-dark" :onclick="retryPending()">Retry now</button>
+      </div>
+
+      <div class="landing-links">
+        <button class="link-btn" :onclick="gotoLeaderboard()">Leaderboard →</button>
+        <button class="link-btn link-btn--dim" :onclick="gotoAdmin()">Admin</button>
+      </div>
+
+    </section>
+
+    <!-- ───────────── STEP: DEVOTEE PICKER ───────────── -->
+    <section class="step-section" :if="step === 'devotee'">
+
+      <div class="step-header">
+        <h2 class="step-title">Who is distributing?</h2>
+      </div>
+
+      <div class="search-wrap">
+        <input class="search-input" type="search" autocomplete="off"
+               placeholder="Search devotee…"
+               :value="devoteeSearch" :oninput="onDevoteeSearch">
+      </div>
+
+      <p class="empty-msg" :if="catalogLoading">Loading devotee list…</p>
+
+      <ul class="devotee-list" :if="!catalogLoading && filteredDevotees.length > 0">
+        <li class="devotee-row" :each="d in filteredDevotees" :onclick="selectDevotee(d)">
+          <span class="devotee-name" :text="d"></span>
+          <span class="devotee-arrow">›</span>
+        </li>
+      </ul>
+
+      <p class="empty-msg" :if="!catalogLoading && filteredDevotees.length === 0 && !devoteeSearch">
+        No devotees configured.<br>Add the Google Sheet URL in Admin.
+      </p>
+      <p class="empty-msg" :if="!catalogLoading && filteredDevotees.length === 0 && devoteeSearch">
+        No devotee matches "<span :text="devoteeSearch"></span>".
+      </p>
+
+    </section>
+
+    <!-- ───────────── STEP: BOOK ENTRY ───────────── -->
+    <section class="step-section step-section--books" :if="step === 'books'">
+
+      <div class="step-header">
+        <h2 class="step-title">Books distributed</h2>
+        <p class="step-sub" :text="selectedDevotee"></p>
+      </div>
+
+      <div class="catalog-notice" :if="catalogNotice" :text="catalogNotice"></div>
+
+      <p class="empty-msg" :if="catalogLoading">Loading catalog…</p>
+
+      <div :each="group in bookGroups" class="book-group">
+        <div class="book-group-header">
+          <span class="book-group-label" :text="group.label"></span>
+          <span class="book-group-pts" :text="group.points + ' pt'"></span>
+        </div>
+        <div :each="book in group.books" class="book-row">
+          <div class="book-info">
+            <span class="book-title" :text="book.title"></span>
+            <span class="book-cost" :text="'$' + (book.cost_cents / 100).toFixed(2)"></span>
+          </div>
+          <div class="qty-controls">
+            <button class="qty-btn" :onclick="decQty(book)">−</button>
+            <span class="qty-num" :text="book.qty"></span>
+            <button class="qty-btn" :onclick="incQty(book)">+</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sticky totals bar (inside step section so :if hides it correctly) -->
+      <div class="totals-bar">
+        <div class="totals-summary" :if="totalBooks > 0">
+          <span class="totals-item" :text="totalBooks + ' books'"></span>
+          <span class="totals-sep">·</span>
+          <span class="totals-item" :text="totalPoints + ' pts'"></span>
+          <span class="totals-sep">·</span>
+          <span class="totals-item totals-item--amt" :text="'~$' + (suggestedCents / 100).toFixed(0)"></span>
+        </div>
+        <div class="totals-summary" :if="totalBooks === 0">
+          <span class="totals-empty">Tap + to add books</span>
+        </div>
+        <button class="btn btn-primary" :if="totalBooks > 0" :onclick="gotoCollection()">Next →</button>
+        <span class="btn btn-primary" style="visibility:hidden" :if="totalBooks === 0">Next →</span>
+      </div>
+
+    </section>
+
+    <!-- ───────────── STEP: COLLECTION ───────────── -->
+    <section class="step-section" :if="step === 'collection'">
+
+      <div class="step-header">
+        <h2 class="step-title">Collection</h2>
+        <p class="step-sub" :text="selectedDevotee + ' · ' + totalBooks + ' books · ' + totalPoints + ' pts'"></p>
+      </div>
+
+      <div class="collection-block">
+        <label class="field-label" for="collection-input">Amount collected</label>
+        <div class="actual-input-wrapper">
+          <span class="currency-prefix">$</span>
+          <input id="collection-input" class="actual-input" type="number"
+                 min="0" step="0.01" placeholder="0.00"
+                 :value="collectedDollars" :oninput="onCollectionInput">
+        </div>
+      </div>
+
+      <div class="payment-block">
+        <label class="field-label">Payment method</label>
+        <div class="payment-toggle">
+          <button class="payment-btn" :class="paymentMethod === 'Cash' ? 'active' : ''"
+                  :onclick="setPayment('Cash')">💵 Cash</button>
+          <button class="payment-btn" :class="paymentMethod === 'Card' ? 'active' : ''"
+                  :onclick="setPayment('Card')">💳 Card</button>
+        </div>
+      </div>
+
+      <div class="optional-block">
+        <label class="field-label">Location <span class="optional-tag">optional</span></label>
+        <input class="text-input" type="text" placeholder="e.g. Sainte-Catherine"
+               :value="sessionLocation" :oninput="onLocationInput">
+
+        <label class="field-label">Note <span class="optional-tag">optional</span></label>
+        <textarea class="text-input textarea-input" rows="3"
+                  placeholder="Any notes…"
+                  :value="sessionNote" :oninput="onNoteInput"></textarea>
+      </div>
+
+      <button class="btn btn-primary btn-submit" :onclick="submitSession()">
+        <span :if="!submitting">Submit Session</span>
+        <span :if="submitting">Submitting…</span>
+      </button>
+
+    </section>
+
+    <!-- ───────────── STEP: CONFIRMATION ───────────── -->
+    <section class="step-section step-section--confirm" :if="step === 'confirm'">
+
+      <div class="confirm-card">
+        <div class="confirm-icon">📚</div>
+        <h2 class="confirm-title">Hare Krishna!</h2>
+        <p class="confirm-sub">Session submitted</p>
+        <div class="confirm-stats">
+          <div class="stat-box">
+            <div class="stat-value" :text="confirmResult ? confirmResult.total_books : totalBooks"></div>
+            <div class="stat-label">Books</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-value" :text="confirmResult ? confirmResult.total_points : totalPoints"></div>
+            <div class="stat-label">Points</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-value" :text="confirmCollected"></div>
+            <div class="stat-label">Collected</div>
+          </div>
+        </div>
+        <p class="confirm-auto" :if="confirmCountdown > 0"
+           :text="'Returning in ' + confirmCountdown + 's…'"></p>
+        <button class="btn btn-outline-dark" :onclick="goto('landing')">Done</button>
+      </div>
+
+    </section>
+
+    <!-- ───────────── STEP: LEADERBOARD ───────────── -->
+    <section class="step-section" :if="step === 'leaderboard'">
+
+      <div class="step-header">
+        <h2 class="step-title">Leaderboard</h2>
+      </div>
+
+      <div class="period-selector">
+        <button class="filter-btn" :class="leaderboardPeriod === 'month' ? 'active' : ''"
+                :onclick="setPeriod('month')">This Month</button>
+        <button class="filter-btn" :class="leaderboardPeriod === 'year' ? 'active' : ''"
+                :onclick="setPeriod('year')">This Year</button>
+        <button class="filter-btn" :class="leaderboardPeriod === 'all' ? 'active' : ''"
+                :onclick="setPeriod('all')">All Time</button>
+      </div>
+
+      <div class="lb-loading" :if="leaderboardLoading">Loading…</div>
+
+      <p class="empty-msg" :if="!leaderboardLoading && leaderboardRows.length === 0">
+        No data for this period yet.
+      </p>
+
+      <div class="lb-table-wrap" :if="!leaderboardLoading && leaderboardRows.length > 0">
+        <table class="lb-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Devotee</th>
+              <th>Books</th>
+              <th>Pts</th>
+              <th>$</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr :each="row in leaderboardRows"
+                :class="row.distributor_name === lastDevotee ? 'lb-row lb-highlight' : 'lb-row'">
+              <td class="lb-rank" :text="row.rank"></td>
+              <td class="lb-name" :text="row.distributor_name"></td>
+              <td class="lb-num" :text="row.books"></td>
+              <td class="lb-num" :text="row.points"></td>
+              <td class="lb-num" :text="'$' + (row.collected_cents / 100).toFixed(0)"></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+    </section>
+
+    <!-- ───────────── STEP: ADMIN ───────────── -->
+    <section class="step-section" :if="step === 'admin'">
+
+      <div class="admin-panel">
+        <h2 class="admin-title">Admin Settings</h2>
+
+        <div class="admin-card">
+          <h3>Goloka API</h3>
+          <label class="admin-label">Goloka URL</label>
+          <input class="admin-url-input" type="url"
+                 placeholder="http://localhost:8080"
+                 :value="adminGoloka" :oninput="onAdminGoloka">
+
+          <label class="admin-label">Sankirtan Write Key</label>
+          <input class="admin-url-input" type="password"
+                 placeholder="sk_sankirtan_…"
+                 :value="adminWriteKey" :oninput="onAdminKey">
+
+          <div class="admin-row">
+            <button class="btn btn-sm btn-outline-dark" :onclick="saveAdmin()">Save</button>
+            <button class="btn btn-sm btn-outline-dark" :onclick="testConnection()">Test Connection</button>
+          </div>
+          <div class="conn-status" :class="connClass" :if="connStatus" :text="connStatus"></div>
+        </div>
+
+        <div class="admin-card">
+          <h3>Devotee List</h3>
+          <p class="admin-hint">
+            Paste the published CSV URL from your Google Sheet:
+            File → Share → Publish to web → CSV.
+            The sheet needs a column named "Name".
+          </p>
+          <label class="admin-label">Devotee Sheet CSV URL</label>
+          <input class="admin-url-input" type="url"
+                 placeholder="https://docs.google.com/spreadsheets/d/e/…/pub?output=csv"
+                 :value="adminDevoteeSheet" :oninput="onAdminSheet">
+          <div class="admin-row">
+            <button class="btn btn-sm btn-outline-dark" :onclick="saveAdmin()">Save</button>
+            <button class="btn btn-sm btn-outline-dark" :onclick="testDevoteeSheet()">Test Sheet</button>
+          </div>
+          <div class="conn-status" :class="sheetClass" :if="sheetStatus" :text="sheetStatus"></div>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ═══════════════════ TOAST ═══════════════════ -->
+  <div class="toast" :if="toastVisible">
+    <div class="toast-content">
+      <span class="toast-text" :text="toastText"></span>
+    </div>
+  </div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
