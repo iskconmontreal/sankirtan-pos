@@ -1,0 +1,77 @@
+/* tokens.css — Sankirtan POS design system (saffron variant of mandir tokens) */
+
+:root {
+  /* Color — warm, temple-inspired; saffron accent for sankirtan */
+  --c-bg:       #faf9f7;
+  --c-surface:  #ffffff;
+  --c-border:   #e8e4df;
+  --c-text:     #2d2a26;
+  --c-text-dim: #8a857e;
+  --c-accent:   #e06c2e;    /* saffron orange */
+  --c-accent-h: #c85a20;    /* hover */
+  --c-ok:       #3a9e6e;    /* positive */
+  --c-warn:     #e6a23c;
+  --c-err:      #e25c5c;
+
+  /* Space — 4px base */
+  --s-xs:  0.25rem;   /* 4 */
+  --s-sm:  0.5rem;    /* 8 */
+  --s-md:  1rem;      /* 16 */
+  --s-lg:  1.5rem;    /* 24 */
+  --s-xl:  2rem;      /* 32 */
+  --s-2xl: 3rem;      /* 48 */
+
+  /* Typography */
+  --f-sans: system-ui, -apple-system, sans-serif;
+  --f-mono: ui-monospace, 'SF Mono', monospace;
+  --f-xs:  0.75rem;
+  --f-sm:  0.875rem;
+  --f-md:  1rem;
+  --f-lg:  1.25rem;
+  --f-xl:  1.5rem;
+  --f-2xl: 1.75rem;
+  --f-3xl: 2.5rem;
+  --f-wt:   400;
+  --f-wt-b: 600;
+
+  /* Radius */
+  --r-sm: 0.375rem;
+  --r-md: 0.625rem;
+  --r-lg: 1rem;
+  --r-xl: 1.5rem;
+
+  /* Shadow */
+  --sh-sm: 0 1px 2px rgba(0,0,0,.06);
+  --sh-md: 0 4px 12px rgba(0,0,0,.08);
+  --sh-lg: 0 8px 24px rgba(0,0,0,.12);
+  --focus-ring: 0 0 0 3px rgba(224, 108, 46, .15);
+
+  /* Layout */
+  --w-max:   34rem;   /* 544px — mobile-first centered column */
+  --h-input: 2.75rem;
+  --h-header: 3.5rem;
+
+  /* Semantic tints */
+  --c-white:          #fff;
+  --c-neutral-hover:  rgba(0,0,0,.04);
+  --c-neutral-active: rgba(0,0,0,.06);
+  --c-accent-hover:   rgba(224,108,46,.10);
+  --c-accent-active:  rgba(224,108,46,.12);
+  --c-err-hover:      rgba(226,92,92,.08);
+  --c-ok-active:      rgba(58,158,110,.10);
+  --c-warn-active:    rgba(230,162,60,.12);
+
+  /* Warning family */
+  --c-warn-text:   rgb(180,115,0);
+  --c-warn-bg:     rgba(245,158,11,.08);
+  --c-warn-border: rgba(245,158,11,.3);
+
+  /* Overlays */
+  --c-overlay: rgba(0,0,0,.4);
+
+  /* Sankirtan brand */
+  --c-sankirtan-strong: #b04d1a;
+  --c-sankirtan-dark:   #8a3912;
+
+  --transition: 0.18s ease;
+}
