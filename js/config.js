@@ -29,13 +29,3 @@ export const CATEGORY_LABELS = {
 
 // Sort order: big-to-small, soft before hard within each size
 export const CATEGORY_ORDER = ['S4','S3','S2','S1','H4','H3','H2','H1'];
-
-export const SAMPLE_BOOKS = [
-  { id: 1, title: 'Bhagavad-gita As It Is',        category: 'S4', points_per_unit: 2,    cost_cents: 1500, active: true },
-  { id: 2, title: 'Srimad-Bhagavatam (volume)',     category: 'S3', points_per_unit: 1,    cost_cents: 1000, active: true },
-  { id: 3, title: 'Krsna Book',                     category: 'S3', points_per_unit: 1,    cost_cents: 1000, active: true },
-  { id: 4, title: 'Teachings of Lord Caitanya',     category: 'S2', points_per_unit: 0.5,  cost_cents:  600, active: true },
-  { id: 5, title: 'Nectar of Devotion',             category: 'S2', points_per_unit: 0.5,  cost_cents:  600, active: true },
-  { id: 6, title: 'Easy Journey to Other Planets',  category: 'S1', points_per_unit: 0.25, cost_cents:  300, active: true },
-  { id: 7, title: 'Beyond Birth and Death',         category: 'S1', points_per_unit: 0.25, cost_cents:  300, active: true },
-];

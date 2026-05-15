@@ -110,6 +110,7 @@
           <div class="book-info">
             <span class="book-title" :text="book.title"></span>
             <span class="book-cost" :text="'$' + (book.cost_cents / 100).toFixed(2)"></span>
+            <span class="book-stock" :text="'Stock: ' + book.stock"></span>
           </div>
           <div class="qty-controls">
             <button class="qty-btn" :onclick="decQty(book)">−</button>
@@ -119,20 +120,16 @@
         </div>
       </div>
 
-      <!-- Sticky totals bar (inside step section so :if hides it correctly) -->
-      <div class="totals-bar">
-        <div class="totals-summary" :if="totalBooks > 0">
+      <!-- Sticky totals bar (only when at least one book is added) -->
+      <div class="totals-bar" :if="totalBooks > 0">
+        <div class="totals-summary">
           <span class="totals-item" :text="totalBooks + ' books'"></span>
           <span class="totals-sep">·</span>
           <span class="totals-item" :text="totalPoints + ' pts'"></span>
           <span class="totals-sep">·</span>
           <span class="totals-item totals-item--amt" :text="'~$' + (suggestedCents / 100).toFixed(0)"></span>
         </div>
-        <div class="totals-summary" :if="totalBooks === 0">
-          <span class="totals-empty">Tap + to add books</span>
-        </div>
-        <button class="btn btn-primary" :if="totalBooks > 0" :onclick="gotoCollection()">Next →</button>
-        <span class="btn btn-primary" style="visibility:hidden" :if="totalBooks === 0">Next →</span>
+        <button class="btn btn-primary" :onclick="gotoCollection()">Next →</button>
       </div>
 
     </section>

@@ -412,6 +412,11 @@ body {
   color: var(--c-text-dim);
 }
 
+.book-stock {
+  font-size: var(--f-xs);
+  color: var(--c-text-dim);
+}
+
 .qty-controls {
   display: flex;
   align-items: center;

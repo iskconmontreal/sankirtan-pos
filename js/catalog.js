@@ -3,7 +3,7 @@
    Devotees: fetched from GET /api/sankirtan/distributors (with localStorage cache)
 */
 
-import { CONFIG, SAMPLE_BOOKS, CATEGORY_LABELS, CATEGORY_POINTS, CATEGORY_ORDER } from './config.js';
+import { CONFIG, CATEGORY_LABELS, CATEGORY_POINTS, CATEGORY_ORDER } from './config.js';
 
 export const Catalog = {
   books:    [],
@@ -50,8 +50,8 @@ export const Catalog = {
       }
     }
 
-    Catalog.books = SAMPLE_BOOKS.slice();
-    return { source: 'sample', count: Catalog.books.length };
+    Catalog.books = [];
+    return { source: 'empty', count: 0 };
   },
 
   // ── Distributors ──────────────────────────────────────────

@@ -155,8 +155,8 @@ export const state = sprae(document.body, {
     try {
       const result = await Catalog.loadBooks(false);
       this.bookGroups = Catalog.groupedBooks();
-      if (result.source === 'sample') {
-        this.catalogNotice = 'No Goloka connection — showing sample catalog. Configure in Admin.';
+      if (result.source === 'empty') {
+        this.catalogNotice = 'Could not load book catalog — configure Goloka URL and Write Key in Admin.';
       } else if (result.source === 'cache') {
         this.catalogNotice = 'Showing cached catalog.';
       }
@@ -167,8 +167,12 @@ export const state = sprae(document.body, {
   },
 
   incQty(book) {
-    Sessions.setQty(book.id, (Sessions.getQty(book.id) || 0) + 1, book);
+    const newQty = (Sessions.getQty(book.id) || 0) + 1;
+    Sessions.setQty(book.id, newQty, book);
     this._syncTotals();
+    if (typeof book.stock === 'number' && newQty > book.stock) {
+      this._showToast(`Warning: "${book.title}" is over stock (${book.stock}). Distribution will still be recorded.`);
+    }
   },
 
   decQty(book) {
@@ -250,6 +254,8 @@ export const state = sprae(document.body, {
       this.lastDevotee      = this.selectedDevotee;
       this.goto('confirm');
       this._startConfirmCountdown();
+      // Refresh catalog so next session sees the decremented stock.
+      Catalog.loadBooks(true).then(() => { this.bookGroups = Catalog.groupedBooks(); });
     } catch (err) {
       console.warn('[DB] postSession failed:', err.message);
       Sessions.savePending(payload);
@@ -398,17 +404,23 @@ export const state = sprae(document.body, {
 
     // Load distributor list and books in parallel
     this.catalogLoading = true;
-    const [distResult] = await Promise.all([
-      Catalog.loadDistributors(false),
-      Catalog.loadBooks(false),
+    const [distResult, bookResult] = await Promise.all([
+      Catalog.loadDistributors(true),
+      Catalog.loadBooks(true),
     ]);
     this.devotees         = Catalog.devotees;
     this.filteredDevotees = Catalog.devotees.slice();
     this.bookGroups       = Catalog.groupedBooks();
     this.catalogLoading   = false;
 
-    if (distResult.source === 'empty') {
+    const distEmpty = distResult.source === 'empty';
+    const bookEmpty = bookResult.source === 'empty';
+    if (distEmpty && bookEmpty) {
+      this.catalogNotice = 'Could not reach Goloka — configure URL and Write Key in Admin.';
+    } else if (distEmpty) {
       this.catalogNotice = 'Could not load devotee list — configure Goloka URL and Write Key in Admin.';
+    } else if (bookEmpty) {
+      this.catalogNotice = 'Could not load book catalog — configure Goloka URL and Write Key in Admin.';
     }
 
     // Count pending submissions
