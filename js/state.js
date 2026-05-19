@@ -3,7 +3,7 @@
 */
 
 import sprae from 'https://cdn.jsdelivr.net/npm/sprae/+esm';
-import { CONFIG } from './config.js';
+import { CONFIG, LANG_LABELS } from './config.js';
 import { Catalog } from './catalog.js';
 import { Sessions } from './sessions.js';
 import { DB } from './db.js';
@@ -56,9 +56,11 @@ export const state = sprae(document.body, {
   selectedDevotee:  '',
 
   // Books / catalog
-  bookGroups:     [],
-  catalogLoading: false,
-  catalogNotice:  '',
+  bookGroups:       [],
+  bookLanguages:    [],
+  selectedLanguage: '',
+  catalogLoading:   false,
+  catalogNotice:    '',
   totalBooks:     0,
   totalPoints:    0,
   suggestedCents: 0,
@@ -119,6 +121,7 @@ export const state = sprae(document.body, {
     Sessions.clear();
     this.selectedDevotee  = '';
     this.devoteeSearch    = '';
+    this.sessionLocation  = '';
     this.filteredDevotees = this.devotees.slice();
     this.goto('devotee');
   },
@@ -154,7 +157,7 @@ export const state = sprae(document.body, {
     this.catalogNotice  = '';
     try {
       const result = await Catalog.loadBooks(false);
-      this.bookGroups = Catalog.groupedBooks();
+      this._refreshLanguages();
       if (result.source === 'empty') {
         this.catalogNotice = 'Could not load book catalog — configure Goloka URL and Write Key in Admin.';
       } else if (result.source === 'cache') {
@@ -190,6 +193,24 @@ export const state = sprae(document.body, {
       ...group,
       books: group.books.map(b => ({ ...b, qty: Sessions.getQty(b.id) })),
     }));
+  },
+
+  _refreshLanguages() {
+    this.bookLanguages = Catalog.languages();
+    if (!this.selectedLanguage || !this.bookLanguages.includes(this.selectedLanguage)) {
+      this.selectedLanguage = this.bookLanguages[0] || '';
+    }
+    this.bookGroups = Catalog.groupedBooks(this.selectedLanguage);
+  },
+
+  setLanguage(lang) {
+    this.selectedLanguage = lang;
+    this.bookGroups = Catalog.groupedBooks(lang);
+    this._syncTotals();
+  },
+
+  langLabel(lang) {
+    return LANG_LABELS[String(lang).toLowerCase()] || lang;
   },
 
   // ── Collection ─────────────────────────────────────────
@@ -410,7 +431,7 @@ export const state = sprae(document.body, {
     ]);
     this.devotees         = Catalog.devotees;
     this.filteredDevotees = Catalog.devotees.slice();
-    this.bookGroups       = Catalog.groupedBooks();
+    this._refreshLanguages();
     this.catalogLoading   = false;
 
     const distEmpty = distResult.source === 'empty';

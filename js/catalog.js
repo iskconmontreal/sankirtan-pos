@@ -108,9 +108,19 @@ export const Catalog = {
 
   // ── Grouped books ─────────────────────────────────────────
 
-  groupedBooks() {
+  languages() {
+    const seen = new Set();
+    Catalog.books.forEach(b => { if (b.language) seen.add(b.language); });
+    return [...seen].sort((a, b) => String(a).localeCompare(String(b)));
+  },
+
+  groupedBooks(language) {
+    const source = language
+      ? Catalog.books.filter(b => b.language === language)
+      : Catalog.books;
+
     const byCategory = {};
-    Catalog.books.forEach(book => {
+    source.forEach(book => {
       const cat = book.category || 'S1';
       if (!byCategory[cat]) byCategory[cat] = [];
       byCategory[cat].push(book);

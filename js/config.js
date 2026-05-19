@@ -29,3 +29,8 @@ export const CATEGORY_LABELS = {
 
 // Sort order: big-to-small, soft before hard within each size
 export const CATEGORY_ORDER = ['S4','S3','S2','S1','H4','H3','H2','H1'];
+
+export const LANG_LABELS = {
+  en: 'English', eng: 'English', english: 'English',
+  fr: 'Français', fre: 'Français', fra: 'Français', french: 'Français',
+};

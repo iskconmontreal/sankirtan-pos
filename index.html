@@ -65,6 +65,13 @@
         <h2 class="step-title">Who is distributing?</h2>
       </div>
 
+      <div class="optional-block">
+        <label class="field-label">Where are you distributing today?
+          <span class="optional-tag">optional</span></label>
+        <input class="text-input" type="text" placeholder="e.g. Ste-Catherine St."
+               :value="sessionLocation" :oninput="onLocationInput">
+      </div>
+
       <div class="search-wrap">
         <input class="search-input" type="search" autocomplete="off"
                placeholder="Search devotee…"
@@ -100,6 +107,12 @@
       <div class="catalog-notice" :if="catalogNotice" :text="catalogNotice"></div>
 
       <p class="empty-msg" :if="catalogLoading">Loading catalog…</p>
+
+      <div class="period-selector" :if="bookLanguages.length > 1">
+        <button class="filter-btn" :each="lang in bookLanguages"
+                :class="selectedLanguage === lang ? 'active' : ''"
+                :onclick="setLanguage(lang)" :text="langLabel(lang)"></button>
+      </div>
 
       <div :each="group in bookGroups" class="book-group">
         <div class="book-group-header">
@@ -163,10 +176,6 @@
       </div>
 
       <div class="optional-block">
-        <label class="field-label">Location <span class="optional-tag">optional</span></label>
-        <input class="text-input" type="text" placeholder="e.g. Sainte-Catherine"
-               :value="sessionLocation" :oninput="onLocationInput">
-
         <label class="field-label">Note <span class="optional-tag">optional</span></label>
         <textarea class="text-input textarea-input" rows="3"
                   placeholder="Any notes…"
