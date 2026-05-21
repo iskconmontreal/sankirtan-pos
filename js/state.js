@@ -142,9 +142,12 @@ export const state = sprae(document.body, {
       await this._loadBooks();
     } else {
       // Reset qtys for a fresh session
-      this.bookGroups = this.bookGroups.map(g => ({
-        ...g,
-        books: g.books.map(b => ({ ...b, qty: 0 })),
+      this.bookGroups = this.bookGroups.map(group => ({
+        ...group,
+        covers: group.covers.map(cover => ({
+          ...cover,
+          books: cover.books.map(b => ({ ...b, qty: 0 })),
+        })),
       }));
     }
     this._syncTotals();
@@ -191,7 +194,10 @@ export const state = sprae(document.body, {
     // Re-hydrate bookGroups with updated qtys so Sprae re-renders
     this.bookGroups = this.bookGroups.map(group => ({
       ...group,
-      books: group.books.map(b => ({ ...b, qty: Sessions.getQty(b.id) })),
+      covers: group.covers.map(cover => ({
+        ...cover,
+        books: cover.books.map(b => ({ ...b, qty: Sessions.getQty(b.id) })),
+      })),
     }));
   },
 
@@ -276,7 +282,7 @@ export const state = sprae(document.body, {
       this.goto('confirm');
       this._startConfirmCountdown();
       // Refresh catalog so next session sees the decremented stock.
-      Catalog.loadBooks(true).then(() => { this.bookGroups = Catalog.groupedBooks(); });
+      Catalog.loadBooks(true).then(() => this._refreshLanguages());
     } catch (err) {
       console.warn('[DB] postSession failed:', err.message);
       Sessions.savePending(payload);

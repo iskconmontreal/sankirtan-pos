@@ -392,6 +392,19 @@ body {
 }
 .book-row:last-child { border-bottom: none; }
 
+.book-cover-header {
+  display: inline-block;
+  margin: 10px 14px 6px;
+  padding: 3px 10px;
+  font-size: var(--f-xs);
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--c-text-dim);
+  background: var(--c-border);
+  border-radius: 999px;
+}
+
 .book-info {
   flex: 1;
   min-width: 0;

@@ -119,16 +119,18 @@
           <span class="book-group-label" :text="group.label"></span>
           <span class="book-group-pts" :text="group.points + ' pt'"></span>
         </div>
-        <div :each="book in group.books" class="book-row">
-          <div class="book-info">
-            <span class="book-title" :text="book.title"></span>
-            <span class="book-cost" :text="'$' + (book.cost_cents / 100).toFixed(2)"></span>
-            <span class="book-stock" :text="'Stock: ' + book.stock"></span>
-          </div>
-          <div class="qty-controls">
-            <button class="qty-btn" :onclick="decQty(book)">−</button>
-            <span class="qty-num" :text="book.qty"></span>
-            <button class="qty-btn" :onclick="incQty(book)">+</button>
+        <div :each="cover in group.covers" class="book-cover-block">
+          <div class="book-cover-header" :text="cover.label + ' cover'"></div>
+          <div :each="book in cover.books" class="book-row">
+            <div class="book-info">
+              <span class="book-title" :text="book.title"></span>
+              <span class="book-stock" :text="'Stock: ' + book.stock"></span>
+            </div>
+            <div class="qty-controls">
+              <button class="qty-btn" :onclick="decQty(book)">−</button>
+              <span class="qty-num" :text="book.qty"></span>
+              <button class="qty-btn" :onclick="incQty(book)">+</button>
+            </div>
           </div>
         </div>
       </div>
@@ -159,8 +161,9 @@
         <label class="field-label" for="collection-input">Amount collected</label>
         <div class="actual-input-wrapper">
           <span class="currency-prefix">$</span>
-          <input id="collection-input" class="actual-input" type="number"
-                 min="0" step="0.01" placeholder="0.00"
+          <input id="collection-input" class="actual-input" type="text"
+                 inputmode="decimal" placeholder="0.00"
+                 onfocus="this.select()"
                  :value="collectedDollars" :oninput="onCollectionInput">
         </div>
       </div>

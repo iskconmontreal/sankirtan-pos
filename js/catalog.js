@@ -3,7 +3,7 @@
    Devotees: fetched from GET /api/sankirtan/distributors (with localStorage cache)
 */
 
-import { CONFIG, CATEGORY_LABELS, CATEGORY_POINTS, CATEGORY_ORDER } from './config.js';
+import { CONFIG, CATEGORY_POINTS, SIZE_LABELS, SIZE_ORDER, COVER_LABELS, COVER_ORDER, LANG_ORDER } from './config.js';
 
 export const Catalog = {
   books:    [],
@@ -111,7 +111,14 @@ export const Catalog = {
   languages() {
     const seen = new Set();
     Catalog.books.forEach(b => { if (b.language) seen.add(b.language); });
-    return [...seen].sort((a, b) => String(a).localeCompare(String(b)));
+    const indexOf = (v) => {
+      const i = LANG_ORDER.findIndex(x => x.toLowerCase() === String(v).toLowerCase());
+      return i === -1 ? Number.MAX_SAFE_INTEGER : i;
+    };
+    return [...seen].sort((a, b) => {
+      const ia = indexOf(a), ib = indexOf(b);
+      return ia !== ib ? ia - ib : String(a).localeCompare(String(b));
+    });
   },
 
   groupedBooks(language) {
@@ -119,25 +126,34 @@ export const Catalog = {
       ? Catalog.books.filter(b => b.language === language)
       : Catalog.books;
 
-    const byCategory = {};
+    const bySize = {};
     source.forEach(book => {
-      const cat = book.category || 'S1';
-      if (!byCategory[cat]) byCategory[cat] = [];
-      byCategory[cat].push(book);
+      const cat = book.category || '';
+      const coverKey = cat[0];
+      const size = parseInt(cat[1], 10);
+      if (!COVER_LABELS[coverKey] || !SIZE_LABELS[size]) return;
+      if (!bySize[size]) bySize[size] = {};
+      if (!bySize[size][coverKey]) bySize[size][coverKey] = [];
+      bySize[size][coverKey].push(book);
     });
 
-    return CATEGORY_ORDER
-      .filter(cat => byCategory[cat]?.length > 0)
-      .map(cat => {
-        const pts = CATEGORY_POINTS[cat] ?? 0;
-        const ptsLabel = pts === Math.floor(pts) ? pts : pts.toFixed(2);
+    return SIZE_ORDER
+      .filter(size => bySize[size])
+      .map(size => {
+        const pts = CATEGORY_POINTS['S' + size] ?? 0;
         return {
-          category: cat,
-          label: CATEGORY_LABELS[cat] || cat,
-          points: parseFloat(ptsLabel),
-          books: byCategory[cat]
-            .sort((a, b) => a.title.localeCompare(b.title))
-            .map(b => ({ ...b, qty: 0 })),
+          sizeKey: size,
+          label:   SIZE_LABELS[size],
+          points:  pts,
+          covers: COVER_ORDER
+            .filter(c => bySize[size][c]?.length > 0)
+            .map(c => ({
+              coverKey: c,
+              label:    COVER_LABELS[c],
+              books:    bySize[size][c]
+                .sort((a, b) => a.title.localeCompare(b.title))
+                .map(b => ({ ...b, qty: 0 })),
+            })),
         };
       });
   },

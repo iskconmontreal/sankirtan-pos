@@ -30,7 +30,14 @@ export const CATEGORY_LABELS = {
 // Sort order: big-to-small, soft before hard within each size
 export const CATEGORY_ORDER = ['S4','S3','S2','S1','H4','H3','H2','H1'];
 
+export const SIZE_LABELS  = { 1: 'Small', 2: 'Medium', 3: 'Big', 4: 'Mahabig' };
+export const SIZE_ORDER   = [1, 2, 3, 4];
+export const COVER_LABELS = { S: 'Soft', H: 'Hard' };
+export const COVER_ORDER  = ['S', 'H'];
+
 export const LANG_LABELS = {
   en: 'English', eng: 'English', english: 'English',
-  fr: 'Français', fre: 'Français', fra: 'Français', french: 'Français',
+  fr: 'French',  fre: 'French',  fra: 'French',  french: 'French',
 };
+
+export const LANG_ORDER = ['English', 'French', 'Spanish', 'Arabic', 'Bengali', 'Hindi'];
