@@ -3,7 +3,7 @@
 */
 
 import sprae from 'https://cdn.jsdelivr.net/npm/sprae/+esm';
-import { CONFIG, LANG_LABELS } from './config.js';
+import { CONFIG, LANG_LABELS, PAYMENT_METHODS } from './config.js';
 import { Catalog } from './catalog.js';
 import { Sessions } from './sessions.js';
 import { DB } from './db.js';
@@ -25,6 +25,11 @@ function _todayISO() {
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
+}
+
+// Parse a dollar-string field into integer cents (0 for blank/invalid).
+function _toCents(v) {
+  return Math.round(parseFloat(v || 0) * 100) || 0;
 }
 
 function _loadStoredConfig() {
@@ -65,9 +70,10 @@ export const state = sprae(document.body, {
   totalPoints:    0,
   suggestedCents: 0,
 
-  // Collection
-  collectedDollars: '',
-  paymentMethod:    'Cash',
+  // Collection — each method is keyed independently; the total is their sum.
+  paymentMethods: PAYMENT_METHODS,
+  methodDollars:  { Cash: '', Card: '', Cheque: '', Interac: '', 'Bank Transfer': '' },
+  collectedCents: 0,
   sessionLocation:  '',
   sessionNote:      '',
   submitting:       false,
@@ -81,6 +87,8 @@ export const state = sprae(document.body, {
   leaderboardPeriod:   'month',
   leaderboardRows:     [],
   leaderboardLoading:  false,
+  leaderboardSortBy:   'points',
+  leaderboardSortDir:  'desc',
   lastDevotee:         '',
 
   // Admin
@@ -92,6 +100,7 @@ export const state = sprae(document.body, {
   // UI
   isOffline:    false,
   pendingCount: 0,
+  pendingError: '',
   toastVisible: false,
   toastText:    '',
 
@@ -223,19 +232,12 @@ export const state = sprae(document.body, {
 
   gotoCollection() {
     if (this.totalBooks === 0) return;
-    // Pre-fill collected amount from suggested
-    this.collectedDollars = this.suggestedCents > 0
-      ? (this.suggestedCents / 100).toFixed(2)
-      : '';
+    this._syncCollected();
     this.goto('collection');
     setTimeout(() => {
-      const input = document.getElementById('collection-input');
+      const input = document.querySelector('.method-input-wrap .actual-input');
       if (input) { input.focus(); input.select(); }
     }, 100);
-  },
-
-  onCollectionInput(e) {
-    this.collectedDollars = e.target.value;
   },
 
   onLocationInput(e) {
@@ -246,8 +248,12 @@ export const state = sprae(document.body, {
     this.sessionNote = e.target.value;
   },
 
-  setPayment(method) {
-    this.paymentMethod = method;
+  // Total collected = sum of every method input. Invoked from the method inputs'
+  // :oninput as a scope method so `this` is the Sprae state (mirrors _syncTotals).
+  _syncCollected() {
+    let total = 0;
+    for (const k in this.methodDollars) total += _toCents(this.methodDollars[k]);
+    this.collectedCents = total;
   },
 
   // ── Submission ─────────────────────────────────────────
@@ -255,29 +261,34 @@ export const state = sprae(document.body, {
   async submitSession() {
     if (this.submitting) return;
 
-    const collectedCents = Math.round(parseFloat(this.collectedDollars || 0) * 100);
-    if (isNaN(collectedCents) || collectedCents < 0) {
-      this._showToast('Please enter a valid collection amount.');
-      return;
+    this._syncCollected();
+
+    // One payment line per method with a positive amount; collected_cents is
+    // derived server-side as the sum of these lines.
+    const payments = [];
+    for (const m of Object.keys(this.methodDollars)) {
+      const cents = _toCents(this.methodDollars[m]);
+      if (cents > 0) payments.push({ method: m, amount_cents: cents });
     }
 
     const payload = {
       distributor_name: this.selectedDevotee,
       occurred_at:      _todayISO(),
       location:         this.sessionLocation.trim() || undefined,
-      payment_method:   this.paymentMethod,
-      collected_cents:  collectedCents,
       note:             this.sessionNote.trim() || undefined,
       books:            Sessions.toApiBooks(),
+      payments,
     };
+
+    const key = Sessions.getIdempotencyKey();
 
     this.submitting = true;
     try {
-      const result = await DB.postSession(payload);
+      const result = await DB.postSession(payload, key);
       Sessions.saveRecent(result);
       Sessions.clear();
       this.confirmResult    = result;
-      this.confirmCollected = '$' + (collectedCents / 100).toFixed(2);
+      this.confirmCollected = '$' + (this.collectedCents / 100).toFixed(2);
       this.lastDevotee      = this.selectedDevotee;
       this.goto('confirm');
       this._startConfirmCountdown();
@@ -285,10 +296,17 @@ export const state = sprae(document.body, {
       Catalog.loadBooks(true).then(() => this._refreshLanguages());
     } catch (err) {
       console.warn('[DB] postSession failed:', err.message);
-      Sessions.savePending(payload);
+      Sessions.savePending(payload, key);
       this.pendingCount = Sessions.getPending().length;
       this.isOffline    = true;
-      this._showToast('Could not reach Goloka — session saved locally. Tap Retry when back online.');
+      // Distinguish "server said no" (status set) from "network down" (no status).
+      if (err.status) {
+        this.pendingError = `${err.message} (HTTP ${err.status})`;
+        this._showToast(`✗ Goloka rejected the session: ${err.message}`);
+      } else {
+        this.pendingError = '';
+        this._showToast('Could not reach Goloka — session saved locally. Tap Retry when back online.');
+      }
     }
     this.submitting = false;
   },
@@ -310,8 +328,8 @@ export const state = sprae(document.body, {
   _resetToLanding() {
     this.sessionLocation  = '';
     this.sessionNote      = '';
-    this.collectedDollars = '';
-    this.paymentMethod    = 'Cash';
+    this.methodDollars    = { Cash: '', Card: '', Cheque: '', Interac: '', 'Bank Transfer': '' };
+    this.collectedCents   = 0;
     this.confirmResult    = null;
     this.confirmCountdown = 0;
     this.goto('landing');
@@ -321,28 +339,55 @@ export const state = sprae(document.body, {
 
   async retryPending() {
     const pending = Sessions.getPending();
-    if (pending.length === 0) { this.pendingCount = 0; return; }
+    if (pending.length === 0) { this.pendingCount = 0; this.pendingError = ''; return; }
 
     let succeeded = 0;
+    let lastErr   = null;
     for (const item of pending) {
+      // Legacy pending items queued before the idempotency rollout don't carry
+      // a key. Mint one inline so the request can flow through Goloka's new
+      // required-header check; otherwise the row would be stuck forever.
+      const key = item.idempotency_key || crypto.randomUUID();
       try {
-        const result = await DB.postSession(item.payload);
+        const result = await DB.postSession(item.payload, key);
         Sessions.saveRecent(result);
         Sessions.removePending(item.id);
         succeeded++;
       } catch (err) {
         console.warn('[Retry] Failed for id', item.id, err.message);
+        lastErr = err;
       }
     }
 
     this.pendingCount = Sessions.getPending().length;
-    if (this.pendingCount === 0) this.isOffline = false;
+    if (this.pendingCount === 0) { this.isOffline = false; this.pendingError = ''; }
+    else if (lastErr) {
+      this.pendingError = lastErr.status
+        ? `${lastErr.message} (HTTP ${lastErr.status})`
+        : lastErr.message;
+    }
 
-    this._showToast(
-      succeeded > 0
-        ? `✓ ${succeeded} session(s) submitted successfully!`
-        : '✗ Still offline — will retry later.'
-    );
+    if (succeeded > 0 && this.pendingCount === 0) {
+      this._showToast(`✓ ${succeeded} session(s) submitted successfully!`);
+    } else if (succeeded > 0) {
+      this._showToast(`✓ ${succeeded} submitted, ${this.pendingCount} still failing — see banner.`);
+    } else if (lastErr) {
+      const detail = lastErr.status ? `${lastErr.message} (HTTP ${lastErr.status})` : lastErr.message;
+      this._showToast(`✗ Retry failed: ${detail}`);
+    } else {
+      this._showToast('✗ Still offline — will retry later.');
+    }
+  },
+
+  // Wipe the pending queue. For when a queued payload is permanently rejected
+  // by Goloka (schema drift, deleted distributor, etc.) and the user has
+  // accepted the donation is lost from the POS's perspective.
+  discardPending() {
+    Sessions.getPending().forEach(p => Sessions.removePending(p.id));
+    this.pendingCount = 0;
+    this.pendingError = '';
+    this.isOffline    = false;
+    this._showToast('Pending session(s) discarded.');
   },
 
   // ── Leaderboard ────────────────────────────────────────
@@ -358,7 +403,8 @@ export const state = sprae(document.body, {
     try {
       const data = await DB.getLeaderboard(this.leaderboardPeriod);
       const results = data.results || data || [];
-      this.leaderboardRows = results.map((row, i) => ({ ...row, rank: i + 1 }));
+      this.leaderboardRows = results;
+      this.applyLeaderboardSort();   // sorts by the active column + numbers rank
     } catch (err) {
       console.warn('[Leaderboard] Failed:', err.message);
       this._showToast('Could not load leaderboard: ' + err.message);
@@ -369,6 +415,34 @@ export const state = sprae(document.body, {
   setPeriod(period) {
     this.leaderboardPeriod = period;
     this.loadLeaderboard();
+  },
+
+  // Intuitive first-click direction: names A→Z; "more is better" metrics high→low;
+  // BBT % low→high (lower = more goes to the temple).
+  lbDefaultDir(col) { return (col === 'distributor_name' || col === 'bbt_pct') ? 'asc' : 'desc'; },
+
+  lbSortArrow(col) {
+    if (this.leaderboardSortBy !== col) return '';
+    return this.leaderboardSortDir === 'asc' ? ' ↑' : ' ↓';
+  },
+
+  sortLeaderboard(col) {
+    if (this.leaderboardSortBy === col) this.leaderboardSortDir = this.leaderboardSortDir === 'asc' ? 'desc' : 'asc';
+    else { this.leaderboardSortBy = col; this.leaderboardSortDir = this.lbDefaultDir(col); }
+    this.applyLeaderboardSort();
+  },
+
+  applyLeaderboardSort() {
+    const col = this.leaderboardSortBy, dir = this.leaderboardSortDir === 'asc' ? 1 : -1;
+    const sorted = [...this.leaderboardRows].sort((a, b) => {
+      let av = a[col], bv = b[col];
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;            // null bbt_pct ("—") always last, both directions
+      if (bv == null) return -1;
+      if (typeof av === 'string' || typeof bv === 'string') return String(av).localeCompare(String(bv)) * dir;
+      return (av - bv) * dir;
+    });
+    this.leaderboardRows = sorted.map((r, i) => ({ ...r, rank: i + 1 }));  // new array → Sprae re-renders
   },
 
   // ── Admin ──────────────────────────────────────────────

@@ -5,9 +5,19 @@
 
 import { CONFIG } from './config.js';
 
+function _newKey() {
+  return (crypto && crypto.randomUUID) ? crypto.randomUUID()
+    : 'k_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+}
+
 export const Sessions = {
   // Current in-progress entries: [{ book_id, qty, title, category, points_per_unit, cost_cents }]
   entries: [],
+
+  // Idempotency key for the *current* in-progress session. Rotated on clear()
+  // so each fresh session gets its own. Sent as `Idempotency-Key` on POST and
+  // persisted alongside any pending payload so retries can't double-record.
+  idempotencyKey: _newKey(),
 
   // ── Current session ───────────────────────────────────
 
@@ -27,6 +37,7 @@ export const Sessions = {
         category:        book.category,
         points_per_unit: book.points_per_unit,
         cost_cents:      book.cost_cents,
+        books_per_unit:  book.books_per_unit || 1,
       });
     }
   },
@@ -38,10 +49,16 @@ export const Sessions = {
 
   clear() {
     Sessions.entries = [];
+    Sessions.idempotencyKey = _newKey();
+  },
+
+  getIdempotencyKey() {
+    return Sessions.idempotencyKey;
   },
 
   getTotalBooks() {
-    return Sessions.entries.reduce((sum, e) => sum + e.qty, 0);
+    // A stack contributes its component count (books_per_unit) per unit sold.
+    return Sessions.entries.reduce((sum, e) => sum + e.qty * (e.books_per_unit || 1), 0);
   },
 
   getTotalPoints() {
@@ -61,9 +78,14 @@ export const Sessions = {
 
   // ── Pending (failed) submissions ──────────────────────
 
-  savePending(payload) {
+  savePending(payload, idempotency_key) {
     const pending = Sessions.getPending();
-    pending.push({ id: Date.now(), payload, saved_at: new Date().toISOString() });
+    pending.push({
+      id: Date.now(),
+      payload,
+      idempotency_key: idempotency_key || _newKey(),
+      saved_at: new Date().toISOString(),
+    });
     try { localStorage.setItem(CONFIG.STORAGE_KEYS.PENDING, JSON.stringify(pending)); }
     catch (_) {}
   },

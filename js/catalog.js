@@ -36,7 +36,7 @@ export const Catalog = {
         const books = await resp.json();
         const active = books
           .filter(b => b.active !== false)
-          .map(b => ({ ...b, points_per_unit: b.points_per_unit ?? CATEGORY_POINTS[b.category] ?? 0 }));
+          .map(b => ({ ...b, points_per_unit: b.points_per_unit ?? CATEGORY_POINTS[b.category] ?? 0, books_per_unit: b.books_per_unit ?? 1 }));
         Catalog.books = active;
         Catalog._writeCache(CONFIG.STORAGE_KEYS.CATALOG_CACHE, active);
         return { source: 'api', count: active.length };
@@ -121,6 +121,31 @@ export const Catalog = {
     });
   },
 
+  // Resolve a stack's component books (each item is { book_id }).
+  _stackComponents(stack) {
+    return (stack.items || [])
+      .map(it => Catalog.books.find(b => b.id === it.book_id))
+      .filter(Boolean);
+  },
+  // A stack's language(s) and availability are derived from its components.
+  _stackLangs(stack) {
+    const langs = [];
+    Catalog._stackComponents(stack).forEach(c => { if (c.language && !langs.includes(c.language)) langs.push(c.language); });
+    return langs;
+  },
+  _stackStock(stack) {
+    const comps = Catalog._stackComponents(stack);
+    return comps.length ? Math.min(...comps.map(c => c.stock || 0)) : 0;
+  },
+  // Stacks for a language (matched if ANY component is in it), as picker rows.
+  stacks(language) {
+    return Catalog.books
+      .filter(b => b.is_stack)
+      .filter(b => !language || Catalog._stackLangs(b).includes(language))
+      .map(b => ({ ...b, stock: Catalog._stackStock(b), qty: 0 }))
+      .sort((a, b) => a.title.localeCompare(b.title));
+  },
+
   groupedBooks(language) {
     const source = language
       ? Catalog.books.filter(b => b.language === language)
@@ -131,13 +156,13 @@ export const Catalog = {
       const cat = book.category || '';
       const coverKey = cat[0];
       const size = parseInt(cat[1], 10);
-      if (!COVER_LABELS[coverKey] || !SIZE_LABELS[size]) return;
+      if (book.is_stack || !COVER_LABELS[coverKey] || !SIZE_LABELS[size]) return;
       if (!bySize[size]) bySize[size] = {};
       if (!bySize[size][coverKey]) bySize[size][coverKey] = [];
       bySize[size][coverKey].push(book);
     });
 
-    return SIZE_ORDER
+    const groups = SIZE_ORDER
       .filter(size => bySize[size])
       .map(size => {
         const pts = CATEGORY_POINTS['S' + size] ?? 0;
@@ -156,6 +181,15 @@ export const Catalog = {
             })),
         };
       });
+
+    // Stacks ride the same group shape (one synthetic cover, no sublabel) so the
+    // picker, totals, and qty controls work unchanged. Shown under each language
+    // a component belongs to.
+    const stacks = Catalog.stacks(language);
+    if (stacks.length) {
+      groups.push({ sizeKey: 'stack', label: 'Stacks', points: null, covers: [{ coverKey: 'stack', label: '', books: stacks }] });
+    }
+    return groups;
   },
 
   // ── localStorage helpers ────────────────────────────────

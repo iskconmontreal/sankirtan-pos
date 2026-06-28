@@ -41,3 +41,14 @@ export const LANG_LABELS = {
 };
 
 export const LANG_ORDER = ['English', 'French', 'Spanish', 'Arabic', 'Bengali', 'Hindi'];
+
+// Payment methods offered at the POS. A session's donation can be split across
+// several methods; the collector keys each one independently and the total is the
+// sum of them. goloka books one finance income row per method.
+export const PAYMENT_METHODS = [
+  { value: 'Cash',          label: '💵 Cash' },
+  { value: 'Card',          label: '💳 Card' },
+  { value: 'Cheque',        label: '🧾 Cheque' },
+  { value: 'Interac',       label: '📲 Interac' },
+  { value: 'Bank Transfer', label: '🏦 Bank Transfer' },
+];

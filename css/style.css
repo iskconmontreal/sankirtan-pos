@@ -255,6 +255,11 @@ body {
   color: var(--c-text-dim);
 }
 
+.pending-text .pending-error {
+  color: var(--c-err);
+  display: block;
+}
+
 .landing-links {
   display: flex;
   justify-content: space-between;
@@ -584,31 +589,44 @@ body {
   margin-bottom: var(--s-lg);
 }
 
-.payment-toggle {
+.method-row {
   display: flex;
-  border: 2px solid var(--c-border);
-  border-radius: var(--r-sm);
-  overflow: hidden;
+  align-items: center;
+  gap: var(--s-sm);
+  margin-bottom: 8px;
 }
-
-.payment-btn {
+.method-label {
   flex: 1;
-  padding: 10px;
-  border: none;
-  background: var(--c-surface);
-  color: var(--c-text-dim);
-  font-family: inherit;
   font-size: var(--f-sm);
   font-weight: 600;
-  cursor: pointer;
-  transition: all var(--transition);
-  min-height: 44px;
+  color: var(--c-text);
 }
-.payment-btn + .payment-btn { border-left: 2px solid var(--c-border); }
-.payment-btn:hover { background: var(--c-neutral-hover); color: var(--c-text); }
-.payment-btn.active {
-  background: var(--c-sankirtan-strong);
-  color: var(--c-surface);
+.method-input-wrap {
+  width: 8.5rem;
+  flex-shrink: 0;
+}
+.method-input-wrap .currency-prefix { font-size: 1rem; padding: 6px 8px; }
+.method-input-wrap .actual-input {
+  font-size: 1.1rem;
+  padding: 6px 10px;
+  text-align: right;
+}
+
+.total-block {
+  margin-bottom: var(--s-lg);
+  border-top: 2px solid var(--c-border);
+  padding-top: var(--s-md);
+}
+.total-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-sm);
+}
+.total-amount {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: var(--c-sankirtan-strong);
 }
 
 .optional-block {
@@ -787,6 +805,13 @@ body {
 .lb-table th:not(:first-child):not(:nth-child(2)) {
   text-align: right;
 }
+
+.lb-table th.sortable {
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.lb-table th.sortable:hover { color: var(--c-text); }
 
 .lb-row td {
   padding: 12px 12px;

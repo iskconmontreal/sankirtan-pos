@@ -46,9 +46,11 @@
       <div class="pending-banner" :if="pendingCount > 0">
         <div class="pending-text">
           <strong :text="pendingCount + ' session(s) pending'"></strong>
-          <span>Could not reach Goloka</span>
+          <span :if="!pendingError">Could not reach Goloka</span>
+          <span class="pending-error" :if="pendingError" :text="pendingError"></span>
         </div>
         <button class="btn btn-sm btn-outline-dark" :onclick="retryPending()">Retry now</button>
+        <button class="btn btn-sm btn-outline-dark" :onclick="discardPending()">Discard</button>
       </div>
 
       <div class="landing-links">
@@ -117,14 +119,14 @@
       <div :each="group in bookGroups" class="book-group">
         <div class="book-group-header">
           <span class="book-group-label" :text="group.label"></span>
-          <span class="book-group-pts" :text="group.points + ' pt'"></span>
+          <span class="book-group-pts" :if="group.points != null" :text="group.points + ' pt'"></span>
         </div>
         <div :each="cover in group.covers" class="book-cover-block">
-          <div class="book-cover-header" :text="cover.label + ' cover'"></div>
+          <div class="book-cover-header" :if="cover.label" :text="cover.label + ' cover'"></div>
           <div :each="book in cover.books" class="book-row">
             <div class="book-info">
               <span class="book-title" :text="book.title"></span>
-              <span class="book-stock" :text="'Stock: ' + book.stock"></span>
+              <span class="book-stock" :text="book.is_stack ? ('contains ' + book.books_per_unit + ' books · avail ' + book.stock) : ('Stock: ' + book.stock)"></span>
             </div>
             <div class="qty-controls">
               <button class="qty-btn" :onclick="decQty(book)">−</button>
@@ -157,24 +159,26 @@
         <p class="step-sub" :text="selectedDevotee + ' · ' + totalBooks + ' books · ' + totalPoints + ' pts'"></p>
       </div>
 
-      <div class="collection-block">
-        <label class="field-label" for="collection-input">Amount collected</label>
-        <div class="actual-input-wrapper">
-          <span class="currency-prefix">$</span>
-          <input id="collection-input" class="actual-input" type="text"
-                 inputmode="decimal" placeholder="0.00"
-                 onfocus="this.select()"
-                 :value="collectedDollars" :oninput="onCollectionInput">
+      <div class="payment-block">
+        <label class="field-label">How it was collected</label>
+
+        <div class="method-row" :each="pm in paymentMethods">
+          <span class="method-label" :text="pm.label"></span>
+          <div class="actual-input-wrapper method-input-wrap">
+            <span class="currency-prefix">$</span>
+            <input class="actual-input" type="text"
+                   inputmode="decimal" placeholder="0.00"
+                   onfocus="this.select()"
+                   :value="methodDollars[pm.value]"
+                   :oninput="e => { methodDollars[pm.value] = e.target.value; _syncCollected() }">
+          </div>
         </div>
       </div>
 
-      <div class="payment-block">
-        <label class="field-label">Payment method</label>
-        <div class="payment-toggle">
-          <button class="payment-btn" :class="paymentMethod === 'Cash' ? 'active' : ''"
-                  :onclick="setPayment('Cash')">💵 Cash</button>
-          <button class="payment-btn" :class="paymentMethod === 'Card' ? 'active' : ''"
-                  :onclick="setPayment('Card')">💳 Card</button>
+      <div class="total-block">
+        <div class="total-row">
+          <span class="field-label">Total collected</span>
+          <span class="total-amount" :text="'$' + (collectedCents/100).toFixed(2)"></span>
         </div>
       </div>
 
@@ -247,10 +251,12 @@
           <thead>
             <tr>
               <th>#</th>
-              <th>Devotee</th>
-              <th>Books</th>
-              <th>Pts</th>
-              <th>$</th>
+              <th class="sortable" :onclick="sortLeaderboard('distributor_name')" :text="'Devotee' + lbSortArrow('distributor_name')"></th>
+              <th class="sortable" :onclick="sortLeaderboard('books')"            :text="'Books' + lbSortArrow('books')"></th>
+              <th class="sortable" :onclick="sortLeaderboard('points')"           :text="'Pts' + lbSortArrow('points')"></th>
+              <th class="sortable" :onclick="sortLeaderboard('collected_cents')"  :text="'$' + lbSortArrow('collected_cents')"></th>
+              <th class="sortable" title="Temple cost ÷ donation — lower is better"
+                  :onclick="sortLeaderboard('bbt_pct')" :text="'BBT %' + lbSortArrow('bbt_pct')"></th>
             </tr>
           </thead>
           <tbody>
@@ -261,6 +267,7 @@
               <td class="lb-num" :text="row.books"></td>
               <td class="lb-num" :text="row.points"></td>
               <td class="lb-num" :text="'$' + (row.collected_cents / 100).toFixed(0)"></td>
+              <td class="lb-num" :text="row.bbt_pct == null ? '—' : Math.round(row.bbt_pct) + '%'"></td>
             </tr>
           </tbody>
         </table>

@@ -29,16 +29,22 @@ export const DB = {
   },
 
   // POST /api/sankirtan/sessions
-  async postSession(payload) {
+  // `idempotency_key` is optional. When supplied, sent as `Idempotency-Key` so
+  // a retry of the same session can't create a duplicate row server-side.
+  async postSession(payload, idempotency_key) {
+    const headers = _headers();
+    if (idempotency_key) headers['Idempotency-Key'] = idempotency_key;
     const resp = await fetch(`${_base()}/api/sankirtan/sessions`, {
       method:  'POST',
-      headers: _headers(),
+      headers,
       body:    JSON.stringify(payload),
     });
     if (!resp.ok) {
       let msg = `HTTP ${resp.status}`;
       try { const e = await resp.json(); msg = e.error || e.message || msg; } catch (_) {}
-      throw new Error(msg);
+      const err = new Error(msg);
+      err.status = resp.status;
+      throw err;
     }
     return resp.json();
   },
