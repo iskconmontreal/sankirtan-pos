@@ -532,3 +532,19 @@ export const state = sprae(document.body, {
 
 // Boot
 document.addEventListener('DOMContentLoaded', () => state.init());
+
+// ── Auto-sync ──────────────────────────────────────────────
+// Flush the pending queue whenever the device regains connectivity, so a queued
+// session doesn't sit until someone taps "Retry". Each pending item carries an
+// idempotency key, so a re-send can never create a duplicate row in Goloka.
+let _autoSyncing = false;
+async function _autoSync() {
+  if (_autoSyncing || !navigator.onLine || state.pendingCount === 0) return;
+  _autoSyncing = true;
+  try { await state.retryPending(); }
+  finally { _autoSyncing = false; }
+}
+window.addEventListener('online', _autoSync);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') _autoSync();
+});

@@ -6,6 +6,7 @@ function _headers() {
   return {
     'Authorization': `Bearer ${CONFIG.SANKIRTAN_WRITE_KEY}`,
     'Content-Type':  'application/json',
+    'ngrok-skip-browser-warning': 'true',
   };
 }
 
