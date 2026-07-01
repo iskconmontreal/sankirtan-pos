@@ -29,7 +29,7 @@ export const Catalog = {
     if (url && key) {
       try {
         const resp = await fetch(`${url}/api/sankirtan/books`, {
-          headers: { 'Authorization': `Bearer ${key}` },
+          headers: { 'Authorization': `Bearer ${key}`, 'ngrok-skip-browser-warning': 'true' },
           cache:   'no-store',
         });
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
@@ -74,7 +74,7 @@ export const Catalog = {
     if (url && key) {
       try {
         const resp = await fetch(`${url}/api/sankirtan/distributors`, {
-          headers: { 'Authorization': `Bearer ${key}` },
+          headers: { 'Authorization': `Bearer ${key}`, 'ngrok-skip-browser-warning': 'true' },
           cache:   'no-store',
         });
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
