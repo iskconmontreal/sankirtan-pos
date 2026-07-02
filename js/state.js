@@ -185,7 +185,9 @@ export const state = sprae(document.body, {
     const newQty = (Sessions.getQty(book.id) || 0) + 1;
     Sessions.setQty(book.id, newQty, book);
     this._syncTotals();
-    if (typeof book.stock === 'number' && newQty > book.stock) {
+    // Stacks are virtual bundles with no stock of their own (component stock is
+    // tracked server-side), so they never trigger an over-stock warning.
+    if (!book.is_stack && typeof book.stock === 'number' && newQty > book.stock) {
       this._showToast(`Warning: "${book.title}" is over stock (${book.stock}). Distribution will still be recorded.`);
     }
   },

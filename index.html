@@ -126,7 +126,7 @@
           <div :each="book in cover.books" class="book-row">
             <div class="book-info">
               <span class="book-title" :text="book.title"></span>
-              <span class="book-stock" :text="book.is_stack ? ('contains ' + book.books_per_unit + ' books · avail ' + book.stock) : ('Stock: ' + book.stock)"></span>
+              <span class="book-stock" :text="book.is_stack ? ('contains ' + book.books_per_unit + ' books') : ('Stock: ' + book.stock)"></span>
             </div>
             <div class="qty-controls">
               <button class="qty-btn" :onclick="decQty(book)">−</button>
