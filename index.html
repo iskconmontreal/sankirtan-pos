@@ -129,9 +129,9 @@
               <span class="book-stock" :text="book.is_stack ? ('contains ' + book.books_per_unit + ' books') : ('Stock: ' + book.stock)"></span>
             </div>
             <div class="qty-controls">
-              <button class="qty-btn" :onclick="decQty(book)">−</button>
-              <span class="qty-num" :text="book.qty"></span>
-              <button class="qty-btn" :onclick="incQty(book)">+</button>
+              <input class="qty-input" type="text" inputmode="numeric" placeholder="0"
+                     :value="book.qty || ''" onfocus="this.select()"
+                     :oninput="e => setBookQty(book, e.target.value)">
             </div>
           </div>
         </div>
@@ -190,6 +190,7 @@
       </div>
 
       <button class="btn btn-primary btn-submit" :onclick="submitSession()"
+              :disabled="collectedCents <= 0"
               :text="submitting ? 'Submitting…' : 'Submit Session'"></button>
 
     </section>

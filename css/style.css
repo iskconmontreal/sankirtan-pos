@@ -132,6 +132,7 @@ body {
   text-decoration: none;
 }
 .btn:active { transform: scale(0.96); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .btn-primary {
   background: var(--c-sankirtan-strong);
@@ -469,6 +470,20 @@ body {
   text-align: center;
   color: var(--c-text);
 }
+
+.qty-input {
+  width: 56px;
+  height: 40px;
+  border: 1.5px solid var(--c-border);
+  border-radius: var(--r-sm);
+  background: var(--c-bg);
+  color: var(--c-text);
+  font-size: var(--f-md);
+  font-weight: 700;
+  text-align: center;
+  font-family: inherit;
+}
+.qty-input:focus { border-color: var(--c-accent); outline: none; }
 
 /* Sticky totals bar */
 .totals-bar {

@@ -212,6 +212,26 @@ export const state = sprae(document.body, {
     }));
   },
 
+  // Totals-only refresh for the numeric qty input: updates the scalar totals
+  // WITHOUT rebuilding bookGroups (which would re-render the list and reset the
+  // input's cursor while typing). Sessions stays the source of truth.
+  _syncTotalsOnly() {
+    this.totalBooks     = Sessions.getTotalBooks();
+    this.totalPoints    = Sessions.getTotalPoints();
+    this.suggestedCents = Sessions.getSuggestedCents();
+  },
+
+  // Set a book's qty from the free-text numeric field (digits only).
+  setBookQty(book, value) {
+    const digits = String(value).replace(/\D+/g, '');
+    const qty = digits ? parseInt(digits, 10) : 0;
+    Sessions.setQty(book.id, qty, book);
+    this._syncTotalsOnly();
+    if (!book.is_stack && typeof book.stock === 'number' && qty > book.stock) {
+      this._showToast(`Warning: "${book.title}" is over stock (${book.stock}). Distribution will still be recorded.`);
+    }
+  },
+
   _refreshLanguages() {
     this.bookLanguages = Catalog.languages();
     if (!this.selectedLanguage || !this.bookLanguages.includes(this.selectedLanguage)) {
@@ -264,6 +284,11 @@ export const state = sprae(document.body, {
     if (this.submitting) return;
 
     this._syncCollected();
+
+    if (this.collectedCents <= 0) {
+      this._showToast('Enter the amount collected before submitting.');
+      return;
+    }
 
     // One payment line per method with a positive amount; collected_cents is
     // derived server-side as the sum of these lines.
