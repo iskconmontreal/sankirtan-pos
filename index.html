@@ -189,10 +189,8 @@
                   :value="sessionNote" :oninput="onNoteInput"></textarea>
       </div>
 
-      <button class="btn btn-primary btn-submit" :onclick="submitSession()">
-        <span :if="!submitting">Submit Session</span>
-        <span :if="submitting">Submitting…</span>
-      </button>
+      <button class="btn btn-primary btn-submit" :onclick="submitSession()"
+              :text="submitting ? 'Submitting…' : 'Submit Session'"></button>
 
     </section>
 

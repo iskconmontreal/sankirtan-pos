@@ -36,8 +36,9 @@ export const Sessions = {
         title:           book.title,
         category:        book.category,
         points_per_unit: book.points_per_unit,
-        cost_cents:      book.cost_cents,
-        books_per_unit:  book.books_per_unit || 1,
+        cost_cents:         book.cost_cents,
+        retail_price_cents: book.retail_price_cents,
+        books_per_unit:     book.books_per_unit || 1,
       });
     }
   },
@@ -67,7 +68,7 @@ export const Sessions = {
   },
 
   getSuggestedCents() {
-    return Sessions.entries.reduce((sum, e) => sum + e.qty * (e.cost_cents || 0), 0);
+    return Sessions.entries.reduce((sum, e) => sum + e.qty * (e.retail_price_cents || 0), 0);
   },
 
   toApiBooks() {
