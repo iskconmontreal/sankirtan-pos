@@ -429,8 +429,7 @@ export const state = sprae(document.body, {
     this.leaderboardRows    = [];
     try {
       const data = await DB.getLeaderboard(this.leaderboardPeriod);
-      const results = data.results || data || [];
-      this.leaderboardRows = results;
+      this.leaderboardRows = data.results;
       this.applyLeaderboardSort();   // sorts by the active column + numbers rank
     } catch (err) {
       console.warn('[Leaderboard] Failed:', err.message);
