@@ -431,6 +431,12 @@ body {
   color: var(--c-text-dim);
 }
 
+.book-price {
+  font-size: var(--f-xs);
+  font-weight: 600;
+  color: var(--c-text);
+}
+
 .book-stock {
   font-size: var(--f-xs);
   color: var(--c-text-dim);

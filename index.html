@@ -126,12 +126,15 @@
           <div :each="book in cover.books" class="book-row">
             <div class="book-info">
               <span class="book-title" :text="book.title"></span>
+              <span class="book-price" :if="book.retail_price_cents" :text="'$' + (book.retail_price_cents / 100).toFixed(2)"></span>
               <span class="book-stock" :text="book.is_stack ? ('contains ' + book.books_per_unit + ' books') : ('Stock: ' + book.stock)"></span>
             </div>
             <div class="qty-controls">
+              <button class="qty-btn" :onclick="decQty(book)">−</button>
               <input class="qty-input" type="text" inputmode="numeric" placeholder="0"
                      :value="book.qty || ''" onfocus="this.select()"
                      :oninput="e => setBookQty(book, e.target.value)">
+              <button class="qty-btn" :onclick="incQty(book)">+</button>
             </div>
           </div>
         </div>
