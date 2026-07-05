@@ -99,6 +99,7 @@ export const state = sprae(document.body, {
 
   // UI
   isOffline:    false,
+  storageError: false,   // true if the in-progress count could not be saved to the device
   pendingCount: 0,
   pendingError: '',
   toastVisible: false,
@@ -185,6 +186,7 @@ export const state = sprae(document.body, {
     const newQty = (Sessions.getQty(book.id) || 0) + 1;
     Sessions.setQty(book.id, newQty, book);
     this._syncTotals();
+    this._saveDraft();
     // Stacks are virtual bundles with no stock of their own (component stock is
     // tracked server-side), so they never trigger an over-stock warning.
     if (!book.is_stack && typeof book.stock === 'number' && newQty > book.stock) {
@@ -196,6 +198,7 @@ export const state = sprae(document.body, {
     const newQty = Math.max(0, (Sessions.getQty(book.id) || 0) - 1);
     Sessions.setQty(book.id, newQty, book);
     this._syncTotals();
+    this._saveDraft();
   },
 
   _syncTotals() {
@@ -221,12 +224,76 @@ export const state = sprae(document.body, {
     this.suggestedCents = Sessions.getSuggestedCents();
   },
 
+  // ── Draft persistence (crash-proof in-progress count) ──
+  // The in-progress count is mirrored to localStorage on every change so a page
+  // reload or tab eviction (iOS Safari on screen-lock) can't wipe it. Per the
+  // safety rule, the draft is removed ONLY after a session is confirmed submitted
+  // to Goloka (see submitSession's success branch) — never on start/reset/offline.
+
+  _saveDraft() {
+    const draft = {
+      step:             this.step,
+      selectedDevotee:  this.selectedDevotee,
+      selectedLanguage: this.selectedLanguage,
+      sessionLocation:  this.sessionLocation,
+      sessionNote:      this.sessionNote,
+      methodDollars:    this.methodDollars,
+      entries:          Sessions.entries,
+      idempotencyKey:   Sessions.getIdempotencyKey(),
+      saved_at:         new Date().toISOString(),
+    };
+    try {
+      localStorage.setItem(CONFIG.STORAGE_KEYS.DRAFT, JSON.stringify(draft));
+      if (this.storageError) this.storageError = false;
+    } catch (_) {
+      this.storageError = true;   // fail loud — never lose a count silently
+    }
+  },
+
+  _clearDraft() {
+    try { localStorage.removeItem(CONFIG.STORAGE_KEYS.DRAFT); } catch (_) {}
+  },
+
+  // Restore a saved in-progress count after a reload/eviction. Returns true if a
+  // draft with recorded books was recovered.
+  _restoreDraft() {
+    let draft;
+    try {
+      const raw = localStorage.getItem(CONFIG.STORAGE_KEYS.DRAFT);
+      if (!raw) return false;
+      draft = JSON.parse(raw);
+    } catch (_) { return false; }
+    if (!draft || !Array.isArray(draft.entries) || draft.entries.length === 0) return false;
+
+    // Rehydrate the session into memory
+    Sessions.entries = draft.entries;
+    if (draft.idempotencyKey) Sessions.idempotencyKey = draft.idempotencyKey;
+
+    // Restore wizard context
+    this.selectedDevotee = draft.selectedDevotee || '';
+    this.sessionLocation = draft.sessionLocation || '';
+    this.sessionNote     = draft.sessionNote     || '';
+    if (draft.methodDollars)    this.methodDollars    = draft.methodDollars;
+    if (draft.selectedLanguage) this.selectedLanguage = draft.selectedLanguage;
+
+    // Rebuild the book list for the saved language and overlay the saved qtys
+    this.bookGroups = Catalog.groupedBooks(this.selectedLanguage);
+    this._syncTotals();
+    this._syncCollected();
+
+    // Land the user back where they were
+    this.goto(draft.step === 'collection' ? 'collection' : 'books');
+    this._showToast('✓ Recovered your in-progress count.');
+    return true;
+  },
+
   // Set a book's qty from the free-text numeric field (digits only).
   setBookQty(book, value) {
     const digits = String(value).replace(/\D+/g, '');
     const qty = digits ? parseInt(digits, 10) : 0;
     Sessions.setQty(book.id, qty, book);
     this._syncTotalsOnly();
+    this._saveDraft();
     if (!book.is_stack && typeof book.stock === 'number' && qty > book.stock) {
       this._showToast(`Warning: "${book.title}" is over stock (${book.stock}). Distribution will still be recorded.`);
     }
@@ -244,6 +311,7 @@ export const state = sprae(document.body, {
     this.selectedLanguage = lang;
     this.bookGroups = Catalog.groupedBooks(lang);
     this._syncTotals();
+    this._saveDraft();
   },
 
   langLabel(lang) {
@@ -255,6 +323,7 @@ export const state = sprae(document.body, {
   gotoCollection() {
     if (this.totalBooks === 0) return;
     this._syncCollected();
+    this._saveDraft();
     this.goto('collection');
     setTimeout(() => {
       const input = document.querySelector('.method-input-wrap .actual-input');
@@ -264,10 +333,12 @@ export const state = sprae(document.body, {
 
   onLocationInput(e) {
     this.sessionLocation = e.target.value;
+    this._saveDraft();
   },
 
   onNoteInput(e) {
     this.sessionNote = e.target.value;
+    this._saveDraft();
   },
 
   // Total collected = sum of every method input. Invoked from the method inputs'
@@ -314,6 +385,7 @@ export const state = sprae(document.body, {
       const result = await DB.postSession(payload, key);
       Sessions.saveRecent(result);
       Sessions.clear();
+      this._clearDraft();   // safe to drop the on-device copy: it's now in Goloka
       this.confirmResult    = result;
       this.confirmCollected = '$' + (this.collectedCents / 100).toFixed(2);
       this.lastDevotee      = this.selectedDevotee;
@@ -540,6 +612,10 @@ export const state = sprae(document.body, {
     this._refreshLanguages();
     this.catalogLoading   = false;
 
+    // Recover any in-progress count that survived a reload / tab eviction
+    // (iOS Safari discards backgrounded tabs on screen-lock).
+    this._restoreDraft();
+
     const distEmpty = distResult.source === 'empty';
     const bookEmpty = bookResult.source === 'empty';
     if (distEmpty && bookEmpty) {
@@ -573,4 +649,9 @@ async function _autoSync() {
 window.addEventListener('online', _autoSync);
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') _autoSync();
+  // 'hidden' fires right before iOS Safari backgrounds/evicts the tab on
+  // screen-lock — flush the in-progress count to disk before it can be lost.
+  else state._saveDraft();
 });
+// pagehide is the last reliable beat before the page is frozen/discarded.
+window.addEventListener('pagehide', () => state._saveDraft());

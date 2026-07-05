@@ -10,6 +10,7 @@ export const CONFIG = {
     CONFIG:         'sankirtan_config',  // { goloka_url, write_key }
     PENDING:        'sankirtan_pending', // queued failed submissions
     RECENT:         'sankirtan_recent',  // last submitted sessions
+    DRAFT:          'sankirtan_draft',   // in-progress count; cleared only on confirmed Goloka submit
   },
 };
 

@@ -28,6 +28,11 @@
   <!-- offline notice -->
   <div class="offline-banner" :if="isOffline">Offline — submission queued locally</div>
 
+  <!-- storage failure notice — the in-progress count could not be saved to the device -->
+  <div class="offline-banner" style="background:#c0392b;color:#fff" :if="storageError">
+    ⚠ Count not saved to this device — keep this page open and submit as soon as possible
+  </div>
+
   <!-- ═══════════════════ MAIN ═══════════════════ -->
   <main id="app-main">
 
@@ -173,7 +178,7 @@
                    inputmode="decimal" placeholder="0.00"
                    onfocus="this.select()"
                    :value="methodDollars[pm.value]"
-                   :oninput="e => { methodDollars[pm.value] = e.target.value; _syncCollected() }">
+                   :oninput="e => { methodDollars[pm.value] = e.target.value; _syncCollected(); _saveDraft() }">
           </div>
         </div>
       </div>
