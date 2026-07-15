@@ -50,6 +50,31 @@ export const DB = {
     return resp.json();
   },
 
+  // Re-push a stored session (disaster recovery). Same POST as postSession, but
+  // also reports whether Goloka already had it: the server sets `Idempotent-Replay:
+  // true` when it replays an existing session instead of creating a new one.
+  // (Header may be CORS-hidden — callers can fall back to comparing session ids.)
+  async repostSession(payload, idempotency_key) {
+    const headers = _headers();
+    headers['Idempotency-Key'] = idempotency_key;
+    const resp = await fetch(`${_base()}/api/sankirtan/sessions`, {
+      method:  'POST',
+      headers,
+      body:    JSON.stringify(payload),
+    });
+    if (!resp.ok) {
+      let msg = `HTTP ${resp.status}`;
+      try { const e = await resp.json(); msg = e.error || e.message || msg; } catch (_) {}
+      const err = new Error(msg);
+      err.status = resp.status;
+      throw err;
+    }
+    return {
+      result:   await resp.json(),
+      replayed: resp.headers.get('Idempotent-Replay') === 'true',
+    };
+  },
+
   // GET /api/sankirtan/leaderboard?period=month
   async getLeaderboard(period = 'month') {
     const resp = await fetch(

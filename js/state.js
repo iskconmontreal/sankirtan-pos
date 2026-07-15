@@ -96,10 +96,14 @@ export const state = sprae(document.body, {
   adminWriteKey: '',
   connStatus:    '',
   connClass:     '',
+  archiveCount:  0,     // sessions stored on this device (submitted archive)
+  repushing:     false,
+  repushStatus:  '',
 
   // UI
   isOffline:    false,
   storageError: false,   // true if the in-progress count could not be saved to the device
+  archiveWarning: '',    // set when the submitted archive was pruned / failed to save
   pendingCount: 0,
   pendingError: '',
   toastVisible: false,
@@ -254,6 +258,15 @@ export const state = sprae(document.body, {
     try { localStorage.removeItem(CONFIG.STORAGE_KEYS.DRAFT); } catch (_) {}
   },
 
+  // Surface archive save problems — pruning or failure must never be silent.
+  _reportArchive(status) {
+    if (status === 'pruned') {
+      this.archiveWarning = '⚠ Device archive is full — oldest submitted sessions were removed to make space. Consider backing up soon.';
+    } else if (status === 'error') {
+      this.archiveWarning = '⚠ Could not keep a copy of the submitted session on this device (storage full).';
+    }
+  },
+
   // Restore a saved in-progress count after a reload/eviction. Returns true if a
   // draft with recorded books was recovered.
   _restoreDraft() {
@@ -264,6 +277,16 @@ export const state = sprae(document.body, {
       draft = JSON.parse(raw);
     } catch (_) { return false; }
     if (!draft || !Array.isArray(draft.entries) || draft.entries.length === 0) return false;
+
+    // If this draft's session is already recorded somewhere durable (queued in
+    // PENDING or archived after a confirmed submit), restoring it would resurrect
+    // an already-recorded count. The data is safe elsewhere — discard the draft
+    // and say so, instead of risking a confusing duplicate.
+    if (draft.idempotencyKey && Sessions.hasRecordOf(draft.idempotencyKey)) {
+      this._clearDraft();
+      this._showToast('Previous count was already submitted — starting fresh.');
+      return false;
+    }
 
     // Rehydrate the session into memory
     Sessions.entries = draft.entries;
@@ -381,16 +404,21 @@ export const state = sprae(document.body, {
     const key = Sessions.getIdempotencyKey();
 
     this.submitting = true;
+    const booksSubmitted = this.totalBooks;
     try {
       const result = await DB.postSession(payload, key);
-      Sessions.saveRecent(result);
+      // Archive the acked session (payload + key kept on-device forever) so the
+      // POS can always re-push ALL books distributed if Goloka ever loses data.
+      this._reportArchive(Sessions.saveRecent(result, payload, key));
+      this.archiveCount = Sessions.getRecent().length;
       Sessions.clear();
-      this._clearDraft();   // safe to drop the on-device copy: it's now in Goloka
+      this._clearDraft();   // the count is in Goloka AND in the on-device archive
       this.confirmResult    = result;
       this.confirmCollected = '$' + (this.collectedCents / 100).toFixed(2);
       this.lastDevotee      = this.selectedDevotee;
       this.goto('confirm');
       this._startConfirmCountdown();
+      this._showToast(`✓ ${booksSubmitted} book(s) registered in Goloka — copy kept on this device.`);
       // Refresh catalog so next session sees the decremented stock.
       Catalog.loadBooks(true).then(() => this._refreshLanguages());
     } catch (err) {
@@ -401,10 +429,10 @@ export const state = sprae(document.body, {
       // Distinguish "server said no" (status set) from "network down" (no status).
       if (err.status) {
         this.pendingError = `${err.message} (HTTP ${err.status})`;
-        this._showToast(`✗ Goloka rejected the session: ${err.message}`);
+        this._showToast(`✗ Goloka rejected the session: ${err.message} — ${booksSubmitted} book(s) kept SAFE on this device.`);
       } else {
         this.pendingError = '';
-        this._showToast('Could not reach Goloka — session saved locally. Tap Retry when back online.');
+        this._showToast(`✗ Goloka unreachable — ${booksSubmitted} book(s) kept SAFE on this device. Will resubmit automatically.`);
       }
     }
     this.submitting = false;
@@ -449,7 +477,7 @@ export const state = sprae(document.body, {
       const key = item.idempotency_key || crypto.randomUUID();
       try {
         const result = await DB.postSession(item.payload, key);
-        Sessions.saveRecent(result);
+        this._reportArchive(Sessions.saveRecent(result, item.payload, key));
         Sessions.removePending(item.id);
         succeeded++;
       } catch (err) {
@@ -459,6 +487,7 @@ export const state = sprae(document.body, {
     }
 
     this.pendingCount = Sessions.getPending().length;
+    this.archiveCount = Sessions.getRecent().length;
     if (this.pendingCount === 0) { this.isOffline = false; this.pendingError = ''; }
     else if (lastErr) {
       this.pendingError = lastErr.status
@@ -467,9 +496,9 @@ export const state = sprae(document.body, {
     }
 
     if (succeeded > 0 && this.pendingCount === 0) {
-      this._showToast(`✓ ${succeeded} session(s) submitted successfully!`);
+      this._showToast(`✓ ${succeeded} queued session(s) now registered in Goloka.`);
     } else if (succeeded > 0) {
-      this._showToast(`✓ ${succeeded} submitted, ${this.pendingCount} still failing — see banner.`);
+      this._showToast(`✓ ${succeeded} now registered in Goloka, ${this.pendingCount} still kept on this device — see banner.`);
     } else if (lastErr) {
       const detail = lastErr.status ? `${lastErr.message} (HTTP ${lastErr.status})` : lastErr.message;
       this._showToast(`✗ Retry failed: ${detail}`);
@@ -554,6 +583,68 @@ export const state = sprae(document.body, {
     this.goto('admin');
   },
 
+  // ── Re-push (disaster recovery) ────────────────────────
+  // Re-send EVERY session this device knows about (queued + archived) with its
+  // original idempotency key. Goloka computes the delta: sessions it already has
+  // are replayed (no duplicate row, no double stock decrement); sessions it lost
+  // (e.g. DB restored from an older backup) are recreated. Safe to run anytime.
+
+  async repushAll() {
+    if (this.repushing) return;
+    this.repushing    = true;
+    this.repushStatus = 'Re-sending all sessions to Goloka…';
+
+    let already = 0, recovered = 0, failed = 0, skipped = 0;
+
+    // 1) Pending first — these were never acked at all.
+    for (const item of Sessions.getPending()) {
+      const key = item.idempotency_key || crypto.randomUUID();
+      try {
+        const { result, replayed } = await DB.repostSession(item.payload, key);
+        this._reportArchive(Sessions.saveRecent(result, item.payload, key));
+        Sessions.removePending(item.id);
+        replayed ? already++ : recovered++;
+      } catch (err) {
+        console.warn('[Repush] pending failed:', err.message);
+        failed++;
+      }
+    }
+
+    // 2) Archived sessions, oldest first. Entries predating the archive update
+    //    have no stored payload and can't be re-sent — reported, not hidden.
+    for (const entry of Sessions.getRecent().slice().reverse()) {
+      if (!entry.payload || !entry.idempotency_key) { skipped++; continue; }
+      try {
+        const { result, replayed } = await DB.repostSession(entry.payload, entry.idempotency_key);
+        // Header can be CORS-hidden — fall back to comparing session ids
+        // (a replay returns the original id; a recreation gets a new one).
+        const isReplay = replayed || (entry.id != null && result && result.id === entry.id);
+        isReplay ? already++ : recovered++;
+      } catch (err) {
+        console.warn('[Repush] archived failed:', err.message);
+        failed++;
+      }
+    }
+
+    this.pendingCount = Sessions.getPending().length;
+    if (this.pendingCount === 0 && failed === 0) { this.isOffline = false; this.pendingError = ''; }
+    this.archiveCount = Sessions.getRecent().length;
+
+    const total = already + recovered + failed;
+    let msg;
+    if (total === 0 && skipped === 0) {
+      msg = 'Nothing to re-send — no sessions stored on this device yet.';
+    } else if (failed === 0 && recovered === 0) {
+      msg = `✓ All ${already} session(s) already in Goloka — nothing was lost.`;
+    } else {
+      msg = `✓ ${already} already registered · ${recovered} recovered · ${failed} failed.`;
+    }
+    if (skipped > 0) msg += ` (${skipped} older session(s) have no stored copy and were skipped.)`;
+    this.repushStatus = msg;
+    this._showToast(msg);
+    this.repushing = false;
+  },
+
   saveAdmin() {
     const cfg = {
       goloka_url: this.adminGoloka.trim(),
@@ -626,8 +717,9 @@ export const state = sprae(document.body, {
       this.catalogNotice = 'Could not load book catalog — configure Goloka URL and Write Key in Admin.';
     }
 
-    // Count pending submissions
+    // Count pending submissions and the on-device submitted archive
     this.pendingCount = Sessions.getPending().length;
+    this.archiveCount = Sessions.getRecent().length;
     if (this.pendingCount > 0) this.isOffline = true;
   },
 });

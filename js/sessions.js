@@ -104,14 +104,31 @@ export const Sessions = {
     catch (_) {}
   },
 
-  // ── Recent sessions (for landing context) ────────────
+  // ── Submitted archive (durable) ───────────────────────
+  // Every acked session is KEPT on the device (payload + idempotency key), so the
+  // POS can always re-push ALL books distributed after a Goloka crash/restore.
+  // Goloka's idempotency keys make re-pushes duplicate-safe. Never pruned by age;
+  // only a high safety cap protects the storage quota — and pruning is reported,
+  // never silent (returns 'pruned' / 'error' so the UI can warn).
 
-  saveRecent(result) {
+  ARCHIVE_CAP: 1000,
+
+  saveRecent(result, payload, idempotency_key) {
     const recent = Sessions.getRecent();
-    recent.unshift({ ...result, saved_at: new Date().toISOString() });
-    const trimmed = recent.slice(0, 10);
-    try { localStorage.setItem(CONFIG.STORAGE_KEYS.RECENT, JSON.stringify(trimmed)); }
-    catch (_) {}
+    recent.unshift({ ...result, payload, idempotency_key, saved_at: new Date().toISOString() });
+    let entries = recent.slice(0, Sessions.ARCHIVE_CAP);
+    let status  = entries.length < recent.length ? 'pruned' : 'ok';
+    try {
+      localStorage.setItem(CONFIG.STORAGE_KEYS.RECENT, JSON.stringify(entries));
+      return status;
+    } catch (_) {
+      // Quota hit — drop the oldest half rather than lose the new session.
+      try {
+        entries = entries.slice(0, Math.ceil(entries.length / 2));
+        localStorage.setItem(CONFIG.STORAGE_KEYS.RECENT, JSON.stringify(entries));
+        return 'pruned';
+      } catch (_) { return 'error'; }
+    }
   },
 
   getRecent() {
@@ -119,5 +136,13 @@ export const Sessions = {
       const raw = localStorage.getItem(CONFIG.STORAGE_KEYS.RECENT);
       return raw ? JSON.parse(raw) : [];
     } catch (_) { return []; }
+  },
+
+  // True if this session key is already recorded somewhere durable (queued in
+  // PENDING or archived after a confirmed submit) — used to skip stale drafts.
+  hasRecordOf(idempotency_key) {
+    if (!idempotency_key) return false;
+    return Sessions.getPending().some(p => p.idempotency_key === idempotency_key)
+        || Sessions.getRecent().some(r => r.idempotency_key === idempotency_key);
   },
 };

@@ -33,6 +33,9 @@
     ⚠ Count not saved to this device — keep this page open and submit as soon as possible
   </div>
 
+  <!-- archive notice — the device copy of submitted sessions was pruned or failed -->
+  <div class="offline-banner" style="background:#c0392b;color:#fff" :if="archiveWarning" :text="archiveWarning"></div>
+
   <!-- ═══════════════════ MAIN ═══════════════════ -->
   <main id="app-main">
 
@@ -61,6 +64,17 @@
       <div class="landing-links">
         <button class="link-btn" :onclick="gotoLeaderboard()">Leaderboard →</button>
         <button class="link-btn link-btn--dim" :onclick="gotoAdmin()">Admin</button>
+      </div>
+
+      <!-- Data safety: every submitted session is kept on this device; re-push is
+           duplicate-safe (Goloka recognizes sessions it already has by their keys). -->
+      <div style="margin-top:var(--s-md); text-align:center; font-size:var(--f-xs);">
+        <span class="link-btn--dim" style="opacity:.7"
+              :text="archiveCount + ' session(s) kept on this device'"></span>
+        <button class="link-btn link-btn--dim" :onclick="repushAll()"
+                :disabled="repushing"
+                :text="repushing ? 'Re-sending…' : 'Re-send all to Goloka'"></button>
+        <div :if="repushStatus" style="margin-top:var(--s-xs); opacity:.85" :text="repushStatus"></div>
       </div>
 
     </section>
