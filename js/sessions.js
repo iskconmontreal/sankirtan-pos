@@ -79,12 +79,16 @@ export const Sessions = {
 
   // ── Pending (failed) submissions ──────────────────────
 
-  savePending(payload, idempotency_key) {
+  // `user_id` stamps the queued session with its owner so a shared tablet
+  // can't flush someone else's count under the wrong account (the server
+  // attributes every submission to whoever holds the JWT).
+  savePending(payload, idempotency_key, user_id) {
     const pending = Sessions.getPending();
     pending.push({
       id: Date.now(),
       payload,
       idempotency_key: idempotency_key || _newKey(),
+      user_id: user_id || null,
       saved_at: new Date().toISOString(),
     });
     try { localStorage.setItem(CONFIG.STORAGE_KEYS.PENDING, JSON.stringify(pending)); }

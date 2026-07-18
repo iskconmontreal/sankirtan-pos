@@ -1,52 +1,148 @@
-/* Sankirtan POS — Goloka REST Client */
+/* Sankirtan POS — Goloka REST Client
+   All requests carry the logged-in user's JWT. On a 401 the client silently
+   exchanges the refresh token for a new JWT and retries once; if that fails
+   the error carries `authExpired: true` so callers can queue the work and
+   show the login step (auth keys are cleared, the offline queue is NOT).
+*/
 
 import { CONFIG } from './config.js';
-
-function _headers() {
-  return {
-    'Authorization': `Bearer ${CONFIG.SANKIRTAN_WRITE_KEY}`,
-    'Content-Type':  'application/json',
-    'ngrok-skip-browser-warning': 'true',
-  };
-}
+import { auth } from './auth.js';
 
 function _base() {
   return CONFIG.GOLOKA_URL.replace(/\/$/, '');
 }
 
-export const DB = {
-  isConfigured() {
-    return !!(CONFIG.GOLOKA_URL && CONFIG.SANKIRTAN_WRITE_KEY);
-  },
+function _headers(extra) {
+  const h = {
+    'Content-Type': 'application/json',
+    'ngrok-skip-browser-warning': 'true',
+    ...extra,
+  };
+  if (auth.token) h['Authorization'] = `Bearer ${auth.token}`;
+  return h;
+}
 
-  // GET /api/sankirtan/books
-  async getBooks() {
-    const resp = await fetch(`${_base()}/api/sankirtan/books`, {
-      headers: _headers(),
-      cache:   'no-store',
+async function _shapeError(resp) {
+  let msg = `HTTP ${resp.status}`;
+  try { const e = await resp.json(); msg = e.error || e.message || msg; } catch (_) {}
+  const err = new Error(msg);
+  err.status = resp.status;
+  return err;
+}
+
+// Single-flight refresh: concurrent 401s share one /auth/refresh round-trip.
+let _refreshPromise = null;
+
+async function _tryRefresh() {
+  const rt = auth.refreshToken;
+  if (!rt) return false;
+  try {
+    const resp = await fetch(`${_base()}/auth/refresh`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
+      body:    JSON.stringify({ refresh_token: rt }),
     });
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    if (!resp.ok) return false;
+    const data = await resp.json();
+    if (!data.token) return false;
+    auth.save(data.token, data.user, data.refresh_token);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+async function _request(path, opts = {}, retried = false) {
+  const resp = await fetch(`${_base()}${path}`, {
+    ...opts,
+    headers: _headers(opts.headers),
+  });
+  if (resp.status === 401 && auth.refreshToken && !retried) {
+    if (!_refreshPromise) _refreshPromise = _tryRefresh().finally(() => { _refreshPromise = null; });
+    if (await _refreshPromise) return _request(path, opts, true);
+    auth.clear();
+    const err = new Error('Signed out — please sign in again');
+    err.status = 401;
+    err.authExpired = true;
+    throw err;
+  }
+  if (resp.status === 401 || resp.status === 403) {
+    const err = await _shapeError(resp);
+    if (resp.status === 401) { auth.clear(); err.authExpired = true; }
+    throw err;
+  }
+  if (!resp.ok) throw await _shapeError(resp);
+  return resp;
+}
+
+export const DB = {
+  // ── Auth ──────────────────────────────────────────────
+
+  // POST /auth/login — returns {step:'password_required'|'otp_required'} or {token,…}
+  async login(email, password) {
+    const resp = await _request('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({
+        email,
+        password:     password || '',
+        device_id:    auth.deviceId,
+        device_label: auth.deviceLabel,
+      }),
+    });
     return resp.json();
   },
 
-  // POST /api/sankirtan/sessions
+  // POST /auth/verify-otp — returns {token, user, refresh_token}
+  async verifyOtp(email, otp) {
+    const resp = await _request('/auth/verify-otp', {
+      method: 'POST',
+      body: JSON.stringify({
+        email,
+        otp,
+        device_id:    auth.deviceId,
+        device_label: auth.deviceLabel,
+      }),
+    });
+    return resp.json();
+  },
+
+  // GET /auth/google — returns {url} to navigate to. The callback returns the
+  // browser to this page with tokens in the URL fragment (auth.capture()).
+  async googleUrl() {
+    const redirect = window.location.href.split('#')[0].split('?')[0];
+    const resp = await _request(`/auth/google?redirect=${encodeURIComponent(redirect)}&device_id=${encodeURIComponent(auth.deviceId)}`);
+    return resp.json();
+  },
+
+  // POST /auth/logout — revoke this device's refresh token (best-effort).
+  async logout() {
+    try {
+      await _request('/auth/logout', {
+        method: 'POST',
+        body: JSON.stringify({ device_id: auth.deviceId }),
+      });
+    } catch (_) {}
+  },
+
+  // ── Sankirtan ─────────────────────────────────────────
+
+  // GET /api/sankirtan/books
+  async getBooks() {
+    const resp = await _request('/api/sankirtan/books', { cache: 'no-store' });
+    return resp.json();
+  },
+
+  // POST /api/sankirtan/sessions — attributed server-side to the JWT user.
   // `idempotency_key` is optional. When supplied, sent as `Idempotency-Key` so
   // a retry of the same session can't create a duplicate row server-side.
   async postSession(payload, idempotency_key) {
-    const headers = _headers();
+    const headers = {};
     if (idempotency_key) headers['Idempotency-Key'] = idempotency_key;
-    const resp = await fetch(`${_base()}/api/sankirtan/sessions`, {
-      method:  'POST',
+    const resp = await _request('/api/sankirtan/sessions', {
+      method: 'POST',
       headers,
-      body:    JSON.stringify(payload),
+      body: JSON.stringify(payload),
     });
-    if (!resp.ok) {
-      let msg = `HTTP ${resp.status}`;
-      try { const e = await resp.json(); msg = e.error || e.message || msg; } catch (_) {}
-      const err = new Error(msg);
-      err.status = resp.status;
-      throw err;
-    }
     return resp.json();
   },
 
@@ -55,20 +151,11 @@ export const DB = {
   // true` when it replays an existing session instead of creating a new one.
   // (Header may be CORS-hidden — callers can fall back to comparing session ids.)
   async repostSession(payload, idempotency_key) {
-    const headers = _headers();
-    headers['Idempotency-Key'] = idempotency_key;
-    const resp = await fetch(`${_base()}/api/sankirtan/sessions`, {
-      method:  'POST',
-      headers,
-      body:    JSON.stringify(payload),
+    const resp = await _request('/api/sankirtan/sessions', {
+      method: 'POST',
+      headers: { 'Idempotency-Key': idempotency_key },
+      body: JSON.stringify(payload),
     });
-    if (!resp.ok) {
-      let msg = `HTTP ${resp.status}`;
-      try { const e = await resp.json(); msg = e.error || e.message || msg; } catch (_) {}
-      const err = new Error(msg);
-      err.status = resp.status;
-      throw err;
-    }
     return {
       result:   await resp.json(),
       replayed: resp.headers.get('Idempotent-Replay') === 'true',
@@ -77,37 +164,10 @@ export const DB = {
 
   // GET /api/sankirtan/leaderboard?period=month
   async getLeaderboard(period = 'month') {
-    const resp = await fetch(
-      `${_base()}/api/sankirtan/leaderboard?period=${encodeURIComponent(period)}`,
-      { headers: _headers(), cache: 'no-store' }
+    const resp = await _request(
+      `/api/sankirtan/leaderboard?period=${encodeURIComponent(period)}`,
+      { cache: 'no-store' }
     );
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     return resp.json();
-  },
-
-  // GET /api/sankirtan/distributors
-  async getDistributors() {
-    const resp = await fetch(`${_base()}/api/sankirtan/distributors`, {
-      headers: _headers(),
-      cache:   'no-store',
-    });
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    return resp.json();
-  },
-
-  // Test connection: GET /api/sankirtan/books, return { ok, message }
-  async testConnection() {
-    try {
-      const resp = await fetch(`${_base()}/api/sankirtan/books`, {
-        headers: _headers(),
-        cache:   'no-store',
-      });
-      if (!resp.ok) return { ok: false, message: `✗ HTTP ${resp.status}` };
-      const books = await resp.json();
-      const count = Array.isArray(books) ? books.filter(b => b.active !== false).length : 0;
-      return { ok: true, message: `✓ Connected — ${count} active book(s) in catalog` };
-    } catch (err) {
-      return { ok: false, message: `✗ ${err.message}` };
-    }
   },
 };

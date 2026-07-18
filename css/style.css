@@ -287,62 +287,6 @@ body {
 .link-btn--dim:hover { color: var(--c-text); }
 
 /* ════════════════════════════════════════
-   DEVOTEE PICKER
-   ════════════════════════════════════════ */
-.search-wrap {
-  margin-bottom: var(--s-md);
-}
-
-.search-input {
-  width: 100%;
-  padding: 11px 16px;
-  border: 2px solid var(--c-border);
-  border-radius: var(--r-sm);
-  font-family: inherit;
-  font-size: var(--f-md);
-  background: var(--c-surface);
-  color: var(--c-text);
-  min-height: var(--h-input);
-  transition: border-color var(--transition);
-}
-.search-input:focus { outline: none; border-color: var(--c-accent); box-shadow: var(--focus-ring); }
-.search-input::placeholder { color: var(--c-text-dim); }
-
-.devotee-list {
-  list-style: none;
-  background: var(--c-surface);
-  border-radius: var(--r-md);
-  box-shadow: var(--sh-sm);
-  overflow: hidden;
-}
-
-.devotee-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--c-border);
-  cursor: pointer;
-  transition: background var(--transition);
-  min-height: 52px;
-  user-select: none;
-}
-.devotee-row:last-child { border-bottom: none; }
-.devotee-row:hover { background: var(--c-accent-hover); }
-.devotee-row:active { background: var(--c-accent-active); }
-
-.devotee-name {
-  font-size: var(--f-md);
-  font-weight: 500;
-  color: var(--c-text);
-}
-
-.devotee-arrow {
-  font-size: var(--f-lg);
-  color: var(--c-text-dim);
-}
-
-/* ════════════════════════════════════════
    BOOK ENTRY
    ════════════════════════════════════════ */
 .step-section--books {
@@ -869,92 +813,47 @@ body {
 }
 
 /* ════════════════════════════════════════
-   ADMIN PANEL
+   LOGIN
    ════════════════════════════════════════ */
-.admin-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-}
-
-.admin-title {
-  font-size: var(--f-xl);
-  font-weight: 700;
-  color: var(--c-sankirtan-strong);
-  padding-bottom: var(--s-md);
-  border-bottom: 2px solid var(--c-border);
-  margin-bottom: var(--s-md);
-}
-
-.admin-card {
+.login-card {
   background: var(--c-surface);
   border-radius: var(--r-md);
   box-shadow: var(--sh-sm);
-  padding: 18px 20px;
-  margin-bottom: var(--s-md);
+  padding: 22px 20px;
+  max-width: 420px;
+  margin: var(--s-lg) auto 0;
 }
 
-.admin-card h3 {
-  font-size: 0.88rem;
-  font-weight: 700;
-  color: var(--c-text);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: var(--s-md);
-}
+.login-card .text-input { margin-bottom: var(--s-md); }
 
-.admin-hint {
-  font-size: 0.82rem;
-  color: var(--c-text-dim);
-  margin-bottom: var(--s-sm);
-  line-height: 1.5;
-}
-
-.admin-label {
-  display: block;
-  font-size: 0.78rem;
-  font-weight: var(--f-wt-b);
-  color: var(--c-text-dim);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  margin-bottom: 4px;
-  margin-top: var(--s-sm);
-}
-.admin-label:first-of-type { margin-top: 0; }
-
-.admin-url-input {
-  width: 100%;
-  padding: 10px 14px;
-  border: 2px solid var(--c-border);
-  border-radius: var(--r-sm);
-  font-family: inherit;
+.login-hint {
   font-size: 0.85rem;
-  color: var(--c-text);
-  margin-bottom: var(--s-sm);
-  min-height: 44px;
-  transition: border-color var(--transition);
-  background: var(--c-surface);
+  color: var(--c-text-dim);
+  line-height: 1.5;
+  margin-bottom: var(--s-md);
 }
-.admin-url-input:focus { outline: none; border-color: var(--c-accent); }
-.admin-url-input::placeholder { color: var(--c-text-dim); }
 
-.admin-row {
+.btn-block { display: flex; width: 100%; justify-content: center; }
+
+.btn-google {
+  gap: 8px;
+  align-items: center;
+}
+
+.login-divider {
   display: flex;
-  gap: var(--s-sm);
-  flex-wrap: wrap;
-  margin-bottom: var(--s-sm);
+  align-items: center;
+  gap: 12px;
+  color: var(--c-text-dim);
+  font-size: 0.8rem;
+  margin: var(--s-md) 0;
 }
-
-.conn-status {
-  padding: 8px 12px;
-  border-radius: var(--r-sm);
-  font-size: 0.82rem;
-  font-weight: 500;
-  margin-top: 4px;
+.login-divider::before,
+.login-divider::after {
+  content: '';
+  flex: 1;
+  border-top: 1px solid var(--c-border);
 }
-.conn-status.success { background: var(--c-ok-active); color: var(--c-ok); border: 1px solid rgba(58,158,110,.3); }
-.conn-status.error   { background: var(--c-err-hover); color: var(--c-err); border: 1px solid rgba(226,92,92,.3); }
-.conn-status.loading { background: var(--c-warn-bg); color: var(--c-warn-text); border: 1px solid var(--c-warn-border); }
 
 /* ════════════════════════════════════════
    TOAST

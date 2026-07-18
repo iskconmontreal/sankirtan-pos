@@ -1,12 +1,14 @@
 /* Sankirtan POS — Reactive State (Sprae)
-   Multi-step wizard: landing → devotee → books → collection → confirm → leaderboard | admin
+   Multi-step wizard: login → landing → books → collection → confirm → leaderboard
+   The logged-in user is the distributor; sessions are attributed server-side.
 */
 
-import sprae from 'https://cdn.jsdelivr.net/npm/sprae/+esm';
+import sprae from './vendor/sprae.js';
 import { CONFIG, LANG_LABELS, PAYMENT_METHODS } from './config.js';
 import { Catalog } from './catalog.js';
 import { Sessions } from './sessions.js';
 import { DB } from './db.js';
+import { auth } from './auth.js';
 
 // ── Module-level non-reactive ──────────────────────────────
 let _toastTimer       = null;
@@ -32,17 +34,6 @@ function _toCents(v) {
   return Math.round(parseFloat(v || 0) * 100) || 0;
 }
 
-function _loadStoredConfig() {
-  try { return JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEYS.CONFIG) || '{}'); }
-  catch (_) { return {}; }
-}
-
-function _applyStoredConfig() {
-  const saved = _loadStoredConfig();
-  if (saved.goloka_url) CONFIG.GOLOKA_URL          = saved.goloka_url;
-  if (saved.write_key)  CONFIG.SANKIRTAN_WRITE_KEY = saved.write_key;
-}
-
 // ── Sprae state ────────────────────────────────────────────
 export const state = sprae(document.body, {
 
@@ -54,11 +45,14 @@ export const state = sprae(document.body, {
   // Date
   todayLabel: _todayLabel(),
 
-  // Devotee
-  devotees:         [],
-  devoteeSearch:    '',
-  filteredDevotees: [],
-  selectedDevotee:  '',
+  // Auth — login wizard sub-steps: email → password | otp
+  authStep:    'email',
+  authEmail:   '',
+  authPassword: '',
+  authOtp:     '',
+  authError:   '',
+  authLoading: false,
+  userName:    '',   // display name of the logged-in devotee
 
   // Books / catalog
   bookGroups:       [],
@@ -91,11 +85,6 @@ export const state = sprae(document.body, {
   leaderboardSortDir:  'desc',
   lastDevotee:         '',
 
-  // Admin
-  adminGoloka:   '',
-  adminWriteKey: '',
-  connStatus:    '',
-  connClass:     '',
   archiveCount:  0,     // sessions stored on this device (submitted archive)
   repushing:     false,
   repushStatus:  '',
@@ -119,36 +108,19 @@ export const state = sprae(document.body, {
 
   goBack() {
     const backMap = {
-      devotee:     'landing',
-      books:       'devotee',
+      books:       'landing',
       collection:  'books',
       confirm:     'landing',
       leaderboard: 'landing',
-      admin:       'landing',
     };
     this.goto(backMap[this.step] || 'landing');
   },
 
   // ── Landing ────────────────────────────────────────────
 
-  startSession() {
+  async startSession() {
     Sessions.clear();
-    this.selectedDevotee  = '';
-    this.devoteeSearch    = '';
-    this.sessionLocation  = '';
-    this.filteredDevotees = this.devotees.slice();
-    this.goto('devotee');
-  },
-
-  // ── Devotee picker ─────────────────────────────────────
-
-  onDevoteeSearch(e) {
-    this.devoteeSearch    = e.target.value;
-    this.filteredDevotees = Catalog.filterDevotees(this.devoteeSearch);
-  },
-
-  async selectDevotee(devotee) {
-    this.selectedDevotee = devotee.spiritual_name || devotee.name;
+    this.sessionLocation = '';
     this.goto('books');
 
     // Refresh book groups (reload if bookGroups is empty)
@@ -176,7 +148,7 @@ export const state = sprae(document.body, {
       const result = await Catalog.loadBooks(false);
       this._refreshLanguages();
       if (result.source === 'empty') {
-        this.catalogNotice = 'Could not load book catalog — configure Goloka URL and Write Key in Admin.';
+        this.catalogNotice = 'Could not load book catalog — check your connection.';
       } else if (result.source === 'cache') {
         this.catalogNotice = 'Showing cached catalog.';
       }
@@ -237,7 +209,6 @@ export const state = sprae(document.body, {
   _saveDraft() {
     const draft = {
       step:             this.step,
-      selectedDevotee:  this.selectedDevotee,
       selectedLanguage: this.selectedLanguage,
       sessionLocation:  this.sessionLocation,
       sessionNote:      this.sessionNote,
@@ -293,7 +264,6 @@ export const state = sprae(document.body, {
     if (draft.idempotencyKey) Sessions.idempotencyKey = draft.idempotencyKey;
 
     // Restore wizard context
-    this.selectedDevotee = draft.selectedDevotee || '';
     this.sessionLocation = draft.sessionLocation || '';
     this.sessionNote     = draft.sessionNote     || '';
     if (draft.methodDollars)    this.methodDollars    = draft.methodDollars;
@@ -392,12 +362,12 @@ export const state = sprae(document.body, {
       if (cents > 0) payments.push({ method: m, amount_cents: cents });
     }
 
+    // No distributor field: Goloka attributes the session to the JWT user.
     const payload = {
-      distributor_name: this.selectedDevotee,
-      occurred_at:      _todayISO(),
-      location:         this.sessionLocation.trim() || undefined,
-      note:             this.sessionNote.trim() || undefined,
-      books:            Sessions.toApiBooks(),
+      occurred_at: _todayISO(),
+      location:    this.sessionLocation.trim() || undefined,
+      note:        this.sessionNote.trim() || undefined,
+      books:       Sessions.toApiBooks(),
       payments,
     };
 
@@ -415,7 +385,7 @@ export const state = sprae(document.body, {
       this._clearDraft();   // the count is in Goloka AND in the on-device archive
       this.confirmResult    = result;
       this.confirmCollected = '$' + (this.collectedCents / 100).toFixed(2);
-      this.lastDevotee      = this.selectedDevotee;
+      this.lastDevotee      = this.userName;
       this.goto('confirm');
       this._startConfirmCountdown();
       this._showToast(`✓ ${booksSubmitted} book(s) registered in Goloka — copy kept on this device.`);
@@ -423,11 +393,17 @@ export const state = sprae(document.body, {
       Catalog.loadBooks(true).then(() => this._refreshLanguages());
     } catch (err) {
       console.warn('[DB] postSession failed:', err.message);
-      Sessions.savePending(payload, key);
+      Sessions.savePending(payload, key, auth.userId);
       this.pendingCount = Sessions.getPending().length;
       this.isOffline    = true;
-      // Distinguish "server said no" (status set) from "network down" (no status).
-      if (err.status) {
+      if (err.authExpired) {
+        // Session expired mid-submit: the count is queued under this user and
+        // will flush automatically right after they sign back in.
+        this.pendingError = '';
+        this._showToast(`✗ Signed out — ${booksSubmitted} book(s) kept SAFE on this device. Sign in to submit.`);
+        this._showLogin();
+      } else if (err.status) {
+        // "Server said no" (status set) vs "network down" (no status).
         this.pendingError = `${err.message} (HTTP ${err.status})`;
         this._showToast(`✗ Goloka rejected the session: ${err.message} — ${booksSubmitted} book(s) kept SAFE on this device.`);
       } else {
@@ -469,8 +445,14 @@ export const state = sprae(document.body, {
     if (pending.length === 0) { this.pendingCount = 0; this.pendingError = ''; return; }
 
     let succeeded = 0;
+    let foreign   = 0;
     let lastErr   = null;
     for (const item of pending) {
+      // The server attributes every submission to whoever holds the JWT, so a
+      // session queued by a different user must wait for its owner to sign in.
+      // Legacy items queued before the login rollout carry no user_id and flush
+      // under the current user.
+      if (item.user_id && auth.userId && item.user_id !== auth.userId) { foreign++; continue; }
       // Legacy pending items queued before the idempotency rollout don't carry
       // a key. Mint one inline so the request can flow through Goloka's new
       // required-header check; otherwise the row would be stuck forever.
@@ -483,6 +465,7 @@ export const state = sprae(document.body, {
       } catch (err) {
         console.warn('[Retry] Failed for id', item.id, err.message);
         lastErr = err;
+        if (err.authExpired) break;   // no point retrying the rest without a session
       }
     }
 
@@ -495,10 +478,17 @@ export const state = sprae(document.body, {
         : lastErr.message;
     }
 
+    if (lastErr && lastErr.authExpired) {
+      this._showToast('✗ Signed out — queued session(s) kept on this device. Sign in to submit.');
+      this._showLogin();
+      return;
+    }
     if (succeeded > 0 && this.pendingCount === 0) {
       this._showToast(`✓ ${succeeded} queued session(s) now registered in Goloka.`);
     } else if (succeeded > 0) {
       this._showToast(`✓ ${succeeded} now registered in Goloka, ${this.pendingCount} still kept on this device — see banner.`);
+    } else if (foreign > 0 && foreign === pending.length) {
+      this._showToast(`${foreign} pending session(s) belong to another account — that devotee must sign in to submit them.`);
     } else if (lastErr) {
       const detail = lastErr.status ? `${lastErr.message} (HTTP ${lastErr.status})` : lastErr.message;
       this._showToast(`✗ Retry failed: ${detail}`);
@@ -572,15 +562,82 @@ export const state = sprae(document.body, {
     this.leaderboardRows = sorted.map((r, i) => ({ ...r, rank: i + 1 }));  // new array → Sprae re-renders
   },
 
-  // ── Admin ──────────────────────────────────────────────
+  // ── Auth ───────────────────────────────────────────────
+  // Mirrors Mandir's login flow: email first; the server answers with
+  // `password_required` or `otp_required` (or a token directly for trusted
+  // devices), and Google is a one-tap alternative.
 
-  gotoAdmin() {
-    const saved        = _loadStoredConfig();
-    this.adminGoloka   = saved.goloka_url || CONFIG.GOLOKA_URL          || '';
-    this.adminWriteKey = saved.write_key  || CONFIG.SANKIRTAN_WRITE_KEY || '';
-    this.connStatus    = '';
-    this.connClass     = '';
-    this.goto('admin');
+  _showLogin() {
+    this.authStep     = 'email';
+    this.authPassword = '';
+    this.authOtp      = '';
+    this.goto('login');
+  },
+
+  async authSubmitEmail() {
+    if (this.authLoading || !this.authEmail.trim()) return;
+    this.authError   = '';
+    this.authLoading = true;
+    try {
+      const res = await DB.login(this.authEmail.trim(), '');
+      if (res.step === 'password_required')  this.authStep = 'password';
+      else if (res.step === 'otp_required')  this.authStep = 'otp';
+      else if (res.token) {
+        auth.save(res.token, res.user, res.refresh_token);
+        await this._postLogin();
+      }
+    } catch (err) {
+      this.authError = err.message || 'Sign in failed';
+    }
+    this.authLoading = false;
+  },
+
+  async authSubmitPassword() {
+    if (this.authLoading) return;
+    this.authError   = '';
+    this.authLoading = true;
+    try {
+      const res = await DB.login(this.authEmail.trim(), this.authPassword);
+      if (res.step === 'otp_required') this.authStep = 'otp';
+      else if (res.token) {
+        auth.save(res.token, res.user, res.refresh_token);
+        await this._postLogin();
+      }
+    } catch (err) {
+      this.authError = err.message || 'Sign in failed';
+    }
+    this.authLoading = false;
+  },
+
+  async authVerifyOtp() {
+    if (this.authLoading) return;
+    this.authError   = '';
+    this.authLoading = true;
+    try {
+      const res = await DB.verifyOtp(this.authEmail.trim(), this.authOtp.trim());
+      auth.save(res.token, res.user, res.refresh_token);
+      await this._postLogin();
+    } catch (err) {
+      this.authError = err.message || 'Verification failed';
+    }
+    this.authLoading = false;
+  },
+
+  async authGoogle() {
+    this.authError = '';
+    try {
+      const { url } = await DB.googleUrl();
+      window.location.href = url;
+    } catch (err) {
+      this.authError = 'Could not connect to server';
+    }
+  },
+
+  async logout() {
+    await DB.logout();          // best-effort refresh-token revocation
+    auth.clear();               // auth keys only — queue/archive/draft survive
+    this.userName = '';
+    this._showLogin();
   },
 
   // ── Re-push (disaster recovery) ────────────────────────
@@ -596,8 +653,10 @@ export const state = sprae(document.body, {
 
     let already = 0, recovered = 0, failed = 0, skipped = 0;
 
-    // 1) Pending first — these were never acked at all.
+    // 1) Pending first — these were never acked at all. Another user's queued
+    //    sessions are left for their owner (server attributes to the JWT user).
     for (const item of Sessions.getPending()) {
+      if (item.user_id && auth.userId && item.user_id !== auth.userId) { skipped++; continue; }
       const key = item.idempotency_key || crypto.randomUUID();
       try {
         const { result, replayed } = await DB.repostSession(item.payload, key);
@@ -639,44 +698,11 @@ export const state = sprae(document.body, {
     } else {
       msg = `✓ ${already} already registered · ${recovered} recovered · ${failed} failed.`;
     }
-    if (skipped > 0) msg += ` (${skipped} older session(s) have no stored copy and were skipped.)`;
+    if (skipped > 0) msg += ` (${skipped} session(s) skipped: no stored copy, or queued by another account.)`;
     this.repushStatus = msg;
     this._showToast(msg);
     this.repushing = false;
   },
-
-  saveAdmin() {
-    const cfg = {
-      goloka_url: this.adminGoloka.trim(),
-      write_key:  this.adminWriteKey.trim(),
-    };
-    try { localStorage.setItem(CONFIG.STORAGE_KEYS.CONFIG, JSON.stringify(cfg)); }
-    catch (_) {}
-    CONFIG.GOLOKA_URL          = cfg.goloka_url;
-    CONFIG.SANKIRTAN_WRITE_KEY = cfg.write_key;
-    this.connStatus = '✓ Settings saved.';
-    this.connClass  = 'success';
-  },
-
-  async testConnection() {
-    if (!this.adminGoloka || !this.adminWriteKey) {
-      this.connStatus = 'Enter Goloka URL and Write Key first.';
-      this.connClass  = 'error';
-      return;
-    }
-    // Temporarily apply to CONFIG for the test
-    CONFIG.GOLOKA_URL          = this.adminGoloka.trim();
-    CONFIG.SANKIRTAN_WRITE_KEY = this.adminWriteKey.trim();
-    this.connStatus = 'Testing…';
-    this.connClass  = 'loading';
-    const { ok, message } = await DB.testConnection();
-    this.connStatus = message;
-    this.connClass  = ok ? 'success' : 'error';
-  },
-
-  // Input handlers for admin fields (so Sprae gets named methods)
-  onAdminGoloka(e) { this.adminGoloka   = e.target.value; },
-  onAdminKey(e)    { this.adminWriteKey = e.target.value; },
 
   // ── Toast ──────────────────────────────────────────────
 
@@ -690,37 +716,46 @@ export const state = sprae(document.body, {
   // ── Init ───────────────────────────────────────────────
 
   async init() {
-    _applyStoredConfig();
+    // Returning from the Google OAuth redirect lands here with #token=… in the
+    // URL fragment; capture() stores it and scrubs the fragment from history.
+    auth.capture();
+    if (!auth.active) { this._showLogin(); return; }
+    await this._postLogin();
+  },
 
-    // Load distributor list and books in parallel
+  // Everything that needs a logged-in user: permission gate, catalog load,
+  // draft recovery, and the pending-queue flush.
+  async _postLogin() {
+    if (!auth.can('sankirtan:view')) {
+      auth.clear();
+      this._showLogin();
+      this.authError = 'This account has no book-distribution access — ask the temple admin for the Book Distributor role.';
+      return;
+    }
+    this.userName = auth.displayName();
+    this.goto('landing');
+
     this.catalogLoading = true;
-    const [distResult, bookResult] = await Promise.all([
-      Catalog.loadDistributors(true),
-      Catalog.loadBooks(true),
-    ]);
-    this.devotees         = Catalog.devotees;
-    this.filteredDevotees = Catalog.devotees.slice();
+    const bookResult = await Catalog.loadBooks(true);
     this._refreshLanguages();
-    this.catalogLoading   = false;
+    this.catalogLoading = false;
 
     // Recover any in-progress count that survived a reload / tab eviction
     // (iOS Safari discards backgrounded tabs on screen-lock).
     this._restoreDraft();
 
-    const distEmpty = distResult.source === 'empty';
-    const bookEmpty = bookResult.source === 'empty';
-    if (distEmpty && bookEmpty) {
-      this.catalogNotice = 'Could not reach Goloka — configure URL and Write Key in Admin.';
-    } else if (distEmpty) {
-      this.catalogNotice = 'Could not load devotee list — configure Goloka URL and Write Key in Admin.';
-    } else if (bookEmpty) {
-      this.catalogNotice = 'Could not load book catalog — configure Goloka URL and Write Key in Admin.';
+    if (bookResult.source === 'empty') {
+      this.catalogNotice = 'Could not load book catalog — check your connection.';
     }
 
-    // Count pending submissions and the on-device submitted archive
+    // Count pending submissions and the on-device submitted archive, then
+    // flush anything queued (e.g. sessions saved while signed out).
     this.pendingCount = Sessions.getPending().length;
     this.archiveCount = Sessions.getRecent().length;
-    if (this.pendingCount > 0) this.isOffline = true;
+    if (this.pendingCount > 0) {
+      this.isOffline = true;
+      this.retryPending();
+    }
   },
 });
 

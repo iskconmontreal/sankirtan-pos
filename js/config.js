@@ -1,18 +1,27 @@
 /* Sankirtan POS — Configuration */
 
+// Production API. Dev override (no build step, no UI) — from the browser console:
+//   localStorage.setItem('sankirtan_goloka_url', 'http://localhost:8080'); location.reload()
+// Remove the key to go back to production.
 export const CONFIG = {
-  GOLOKA_URL:          'http://localhost:8080',
-  SANKIRTAN_WRITE_KEY: '',
-  STORE_NAME:          'ISKCON Montréal — Sankirtan',
+  GOLOKA_URL: localStorage.getItem('sankirtan_goloka_url') || 'https://api.iskconmontreal.ca',
+  STORE_NAME: 'ISKCON Montréal — Sankirtan',
   STORAGE_KEYS: {
-    CATALOG_CACHE:  'sankirtan_catalog_cache',
-    DEVOTEES_CACHE: 'sankirtan_devotees_cache',
-    CONFIG:         'sankirtan_config',  // { goloka_url, write_key }
-    PENDING:        'sankirtan_pending', // queued failed submissions
-    RECENT:         'sankirtan_recent',  // last submitted sessions
-    DRAFT:          'sankirtan_draft',   // in-progress count; cleared only on confirmed Goloka submit
+    CATALOG_CACHE: 'sankirtan_catalog_cache',
+    TOKEN:         'sankirtan_token',   // JWT access token
+    USER:          'sankirtan_user',    // logged-in user object
+    DEVICE:        'sankirtan_device',  // stable device UUID
+    REFRESH:       'sankirtan_refresh', // refresh token
+    PENDING:       'sankirtan_pending', // queued failed submissions
+    RECENT:        'sankirtan_recent',  // last submitted sessions
+    DRAFT:         'sankirtan_draft',   // in-progress count; cleared only on confirmed Goloka submit
   },
 };
+
+// Storage keys from the pre-login era (shared write key + devotee picker).
+for (const k of ['sankirtan_config', 'sankirtan_devotees_cache']) {
+  try { localStorage.removeItem(k); } catch (_) {}
+}
 
 export const CATEGORY_POINTS = {
   S1: 0.25, H1: 0.25,
