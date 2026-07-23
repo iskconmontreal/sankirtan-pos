@@ -21,7 +21,7 @@ localStorage.removeItem('sankirtan_goloka_url'); location.reload()
 
 ## Accounts & roles
 
-There is no sign-up. The temple admin creates each devotee's user in Mandir (Users) with their email and assigns the **Book Distributor** role (`sankirtan:view`). Google sign-in matches that email; email+OTP works as a fallback. Accounts without the role are refused by the POS.
+There is no sign-up. The temple admin creates each devotee's user in Mandir (Users) with their email and assigns the **Book Distributor** role (`sankirtan:view` to browse + `sankirtan:create` to submit sessions). Google sign-in matches that email; email+OTP works as a fallback. Accounts without the role are refused by the POS.
 
 ## GitHub Pages
 

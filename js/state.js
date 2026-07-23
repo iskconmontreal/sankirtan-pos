@@ -347,6 +347,13 @@ export const state = sprae(document.body, {
   async submitSession() {
     if (this.submitting) return;
 
+    // Writing requires sankirtan:create (sankirtan:view is read-only). Catch it
+    // here with a clear message instead of letting the API return a bare 403.
+    if (!auth.can('sankirtan:create')) {
+      this._showToast('This account can only view — ask the temple admin for the Book Distributor role to submit sessions.');
+      return;
+    }
+
     this._syncCollected();
 
     if (this.collectedCents <= 0) {
