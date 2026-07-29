@@ -4,7 +4,7 @@
 //   localStorage.setItem('sankirtan_goloka_url', 'http://localhost:8080'); location.reload()
 // Remove the key to go back to production.
 export const CONFIG = {
-  GOLOKA_URL: localStorage.getItem('sankirtan_goloka_url') || 'https://api.iskconmontreal.ca',
+  GOLOKA_URL: localStorage.getItem('sankirtan_goloka_url') || 'https://api.iskconmontrealsankirtan.com',
   STORE_NAME: 'ISKCON Montréal — Sankirtan',
   STORAGE_KEYS: {
     CATALOG_CACHE: 'sankirtan_catalog_cache',
