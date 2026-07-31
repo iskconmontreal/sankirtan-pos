@@ -6,6 +6,16 @@
 import { CONFIG, CATEGORY_POINTS, SIZE_LABELS, SIZE_ORDER, COVER_LABELS, COVER_ORDER, LANG_ORDER } from './config.js';
 import { DB } from './db.js';
 
+// A "set" is a multi-volume boxed title. The catalog has no flag for it — the
+// convention is that the title says so. Whole-word match so "Sunset"/"Asset"
+// can't false-positive.
+const SET_TITLE_RE = /\bsets?\b/i;
+
+// Books → picker rows: title-sorted, qty zeroed (state.js re-hydrates the qtys).
+const _rows = (books) => books
+  .sort((a, b) => a.title.localeCompare(b.title))
+  .map(b => ({ ...b, qty: 0 }));
+
 export const Catalog = {
   books: [],
 
@@ -83,20 +93,34 @@ export const Catalog = {
       .sort((a, b) => a.title.localeCompare(b.title));
   },
 
+  // Every active book reaches the picker: `active` is the only thing allowed to
+  // hide a title. Excluded from the BBT score ≠ excluded from distribution, and a
+  // book with no size tier yet (S0/H0, page count still missing) is still being
+  // handed out. Those land in their own groups instead of being dropped.
   groupedBooks(language) {
     const source = language
       ? Catalog.books.filter(b => b.language === language)
       : Catalog.books;
 
     const bySize = {};
+    const sets   = [];
+    const other  = {};  // coverKey → books, for titles with no scored tier
     source.forEach(book => {
+      if (book.is_stack) return;  // stacks have their own group, below
       const cat = book.category || '';
       const coverKey = cat[0];
       const size = parseInt(cat[1], 10);
-      if (book.is_stack || !COVER_LABELS[coverKey] || !SIZE_LABELS[size]) return;
-      if (!bySize[size]) bySize[size] = {};
-      if (!bySize[size][coverKey]) bySize[size][coverKey] = [];
-      bySize[size][coverKey].push(book);
+      if (SET_TITLE_RE.test(book.title || '')) {
+        sets.push(book);
+      } else if (book.exclude_from_bbt || !COVER_LABELS[coverKey] || !SIZE_LABELS[size]) {
+        const key = COVER_LABELS[coverKey] ? coverKey : '?';
+        if (!other[key]) other[key] = [];
+        other[key].push(book);
+      } else {
+        if (!bySize[size]) bySize[size] = {};
+        if (!bySize[size][coverKey]) bySize[size][coverKey] = [];
+        bySize[size][coverKey].push(book);
+      }
     });
 
     const groups = SIZE_ORDER
@@ -109,15 +133,28 @@ export const Catalog = {
           points:  pts,
           covers: COVER_ORDER
             .filter(c => bySize[size][c]?.length > 0)
-            .map(c => ({
-              coverKey: c,
-              label:    COVER_LABELS[c],
-              books:    bySize[size][c]
-                .sort((a, b) => a.title.localeCompare(b.title))
-                .map(b => ({ ...b, qty: 0 })),
-            })),
+            .map(c => ({ coverKey: c, label: COVER_LABELS[c], books: _rows(bySize[size][c]) })),
         };
       });
+
+    // Sets (boxed multi-volume titles) — one block, no cover sublabel. Matched on
+    // the book's own language like any other row, so the French Srimad-Bhagavatam
+    // Set only shows under French.
+    if (sets.length) {
+      groups.push({
+        sizeKey: 'sets', label: 'Sets', points: null,
+        covers: [{ coverKey: 'set', label: '', books: _rows(sets) }],
+      });
+    }
+
+    // Everything else the BBT doesn't score: excluded titles, and books still
+    // waiting on a page count (S0/H0). Distributed all the same.
+    const otherCovers = [...COVER_ORDER, '?']
+      .filter(c => other[c]?.length > 0)
+      .map(c => ({ coverKey: c, label: COVER_LABELS[c] || '', books: _rows(other[c]) }));
+    if (otherCovers.length) {
+      groups.push({ sizeKey: 'other', label: 'Other titles — not scored', points: null, covers: otherCovers });
+    }
 
     // Stacks ride the same group shape (one synthetic cover, no sublabel) so the
     // picker, totals, and qty controls work unchanged. Shown under each language
