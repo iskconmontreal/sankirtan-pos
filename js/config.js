@@ -61,4 +61,5 @@ export const PAYMENT_METHODS = [
   { value: 'Cheque',        label: '🧾 Cheque' },
   { value: 'Interac',       label: '📲 Interac' },
   { value: 'Bank Transfer', label: '🏦 Bank Transfer' },
+  { value: 'Other',         label: '🪙 Other' },
 ];

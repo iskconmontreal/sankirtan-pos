@@ -66,7 +66,7 @@ export const state = sprae(document.body, {
 
   // Collection — each method is keyed independently; the total is their sum.
   paymentMethods: PAYMENT_METHODS,
-  methodDollars:  { Cash: '', Card: '', Cheque: '', Interac: '', 'Bank Transfer': '' },
+  methodDollars:  { Cash: '', Card: '', Cheque: '', Interac: '', 'Bank Transfer': '', Other: '' },
   collectedCents: 0,
   sessionLocation:  '',
   sessionNote:      '',
@@ -438,7 +438,7 @@ export const state = sprae(document.body, {
   _resetToLanding() {
     this.sessionLocation  = '';
     this.sessionNote      = '';
-    this.methodDollars    = { Cash: '', Card: '', Cheque: '', Interac: '', 'Bank Transfer': '' };
+    this.methodDollars    = { Cash: '', Card: '', Cheque: '', Interac: '', 'Bank Transfer': '', Other: '' };
     this.collectedCents   = 0;
     this.confirmResult    = null;
     this.confirmCountdown = 0;
