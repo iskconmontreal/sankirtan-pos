@@ -28,13 +28,14 @@
   <!-- offline notice -->
   <div class="offline-banner" :if="isOffline">Offline — submission queued locally</div>
 
-  <!-- storage failure notice — the in-progress count could not be saved to the device -->
-  <div class="offline-banner" style="background:#c0392b;color:#fff" :if="storageError">
-    ⚠ Count not saved to this device — keep this page open and submit as soon as possible
+  <!-- storage failure notice — fires ONLY when localStorage actually threw, so the
+       in-progress count really is at risk. Reassurance lives in the books footer. -->
+  <div class="offline-banner offline-banner--alert" :if="storageError">
+    ⚠ Could not save to this device — keep this page open and submit as soon as you can
   </div>
 
   <!-- archive notice — the device copy of submitted sessions was pruned or failed -->
-  <div class="offline-banner" style="background:#c0392b;color:#fff" :if="archiveWarning" :text="archiveWarning"></div>
+  <div class="offline-banner offline-banner--alert" :if="archiveWarning" :text="archiveWarning"></div>
 
   <!-- ═══════════════════ MAIN ═══════════════════ -->
   <main id="app-main">

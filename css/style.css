@@ -98,6 +98,13 @@ body {
   font-weight: 600;
 }
 
+/* Real failure state — the count could not be written to the device. */
+.offline-banner--alert {
+  background: var(--c-err);
+  color: var(--c-white);
+  border-bottom-color: var(--c-err);
+}
+
 /* ════════════════════════════════════════
    MAIN LAYOUT
    ════════════════════════════════════════ */
