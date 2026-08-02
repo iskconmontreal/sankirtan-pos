@@ -22,6 +22,7 @@
           <div class="header-subtitle" :text="headerSub()"></div>
         </div>
       </div>
+      <div class="header-avatar" :if="step === 'landing'" :text="userInitials()"></div>
     </div>
   </header>
 
@@ -121,40 +122,76 @@
     <!-- ───────────── STEP: LANDING ───────────── -->
     <section class="step-section" :if="step === 'landing'">
 
-      <div class="landing-hero">
-        <div class="landing-date" :text="todayLabel"></div>
-        <h2 class="landing-title">Hare Krishna!</h2>
-        <p class="landing-tagline" :text="'Welcome, ' + userName"></p>
-        <button class="btn btn-primary btn-hero" :onclick="startSession()">
-          Start Session
-        </button>
-      </div>
+      <div class="home">
 
-      <div class="pending-banner" :if="pendingCount > 0">
-        <div class="pending-text">
-          <strong :text="pendingCount + ' session(s) pending'"></strong>
-          <span :if="!pendingError">Could not reach Goloka</span>
-          <span class="pending-error" :if="pendingError" :text="pendingError"></span>
+        <div class="home-greeting">
+          <h2 class="home-hello" :text="'Hare Krishna, ' + userName"></h2>
+          <p class="home-last" :if="lastSessionLabel"
+             :text="'Last out ' + lastSessionLabel + ' — ' + lastSessionBooks + (lastSessionBooks === 1 ? ' book' : ' books')"></p>
+          <p class="home-last" :if="!lastSessionLabel" :text="todayLabel"></p>
         </div>
-        <button class="btn btn-sm btn-outline-dark" :onclick="retryPending()">Retry now</button>
-        <button class="btn btn-sm btn-outline-dark" :onclick="discardPending()">Discard</button>
-      </div>
 
-      <div class="landing-links">
-        <button class="link-btn" :onclick="gotoLeaderboard()">Leaderboard →</button>
-        <button class="link-btn link-btn--dim" :onclick="logout()"
-                :text="'Sign out (' + userName + ')'"></button>
-      </div>
+        <button class="btn btn-start" :onclick="startSession()">Start Session</button>
 
-      <!-- Data safety: every submitted session is kept on this device; re-push is
-           duplicate-safe (Goloka recognizes sessions it already has by their keys). -->
-      <div style="margin-top:var(--s-md); text-align:center; font-size:var(--f-xs);">
-        <span class="link-btn--dim" style="opacity:.7"
-              :text="archiveCount + ' session(s) kept on this device'"></span>
-        <button class="link-btn link-btn--dim" :onclick="repushAll()"
-                :disabled="repushing"
-                :text="repushing ? 'Re-sending…' : 'Re-send all to Goloka'"></button>
-        <div :if="repushStatus" style="margin-top:var(--s-xs); opacity:.85" :text="repushStatus"></div>
+        <!-- Own standing. Zeroes until the two GETs land, or offline. -->
+        <div class="stat-row">
+          <div class="stat-tile">
+            <div class="stat-tile-value" :text="myBooksYear"></div>
+            <div class="stat-tile-label">books this year</div>
+          </div>
+          <div class="stat-tile">
+            <div class="stat-tile-value" :text="myPointsYear"></div>
+            <div class="stat-tile-label">points</div>
+          </div>
+          <div class="stat-tile">
+            <div class="stat-tile-value" :text="myRank > 0 ? '#' + myRank : '—'"></div>
+            <div class="stat-tile-label">this year</div>
+          </div>
+        </div>
+
+        <div class="temple-card" :if="templeBooksMonth > 0">
+          <div class="temple-card-top">
+            <span class="temple-card-kicker" :text="periodLabel('month').toUpperCase() + ' · TEMPLE'"></span>
+            <span class="temple-card-streak" :if="streakDays > 1" :text="streakDays + '-day streak'"></span>
+          </div>
+          <div class="temple-card-value" :text="templeBooksMonth.toLocaleString()"></div>
+          <div class="temple-card-caption"
+               :text="'books · ' + templeDevoteesMonth + (templeDevoteesMonth === 1 ? ' devotee' : ' devotees') + ' out this month'"></div>
+        </div>
+
+        <!-- Sync status. Replaces the ambiguous "N session(s) kept on this device
+             Re-send all to Goloka" run-on, which read as a warning when it was not. -->
+        <div class="sync-card" :if="pendingCount === 0">
+          <span class="sync-badge">✓</span>
+          <div class="sync-text">
+            <strong :text="archiveCount === 0 ? 'Nothing to sync yet' : 'All ' + archiveCount + (archiveCount === 1 ? ' session' : ' sessions') + ' synced to Goloka'"></strong>
+            <span>A copy stays on this device</span>
+          </div>
+          <button class="link-btn link-btn--dim link-btn--sm" :onclick="repushAll()"
+                  :disabled="repushing"
+                  :text="repushing ? 'Re-sending…' : 'Re-send'"></button>
+        </div>
+
+        <div class="sync-card sync-card--warn" :if="pendingCount > 0">
+          <span class="sync-badge sync-badge--warn">!</span>
+          <div class="sync-text">
+            <strong :text="pendingCount + (pendingCount === 1 ? ' session' : ' sessions') + ' waiting to reach Goloka'"></strong>
+            <span :if="!pendingError">Kept safe on this device — will retry automatically</span>
+            <span class="pending-error" :if="pendingError" :text="pendingError"></span>
+          </div>
+        </div>
+        <div class="sync-actions" :if="pendingCount > 0">
+          <button class="btn btn-sm btn-outline-dark" :onclick="retryPending()">Retry now</button>
+          <button class="btn btn-sm btn-outline-dark" :onclick="discardPending()">Discard</button>
+        </div>
+
+        <div :if="repushStatus" class="home-note" :text="repushStatus"></div>
+
+        <div class="home-nav">
+          <button class="btn-nav" :onclick="gotoLeaderboard()">Leaderboard</button>
+          <button class="btn-nav" :onclick="logout()">Sign out</button>
+        </div>
+
       </div>
 
     </section>
@@ -365,13 +402,11 @@
     <!-- ───────────── STEP: LEADERBOARD ───────────── -->
     <section class="step-section" :if="step === 'leaderboard'">
 
-      <div class="period-selector">
-        <button class="filter-btn" :class="leaderboardPeriod === 'month' ? 'active' : ''"
-                :onclick="setPeriod('month')">This Month</button>
-        <button class="filter-btn" :class="leaderboardPeriod === 'year' ? 'active' : ''"
-                :onclick="setPeriod('year')">This Year</button>
-        <button class="filter-btn" :class="leaderboardPeriod === 'all' ? 'active' : ''"
-                :onclick="setPeriod('all')">All Time</button>
+      <!-- Segmented control -->
+      <div class="segmented">
+        <button class="segment" :each="p in ['month', 'year', 'all']"
+                :class="leaderboardPeriod === p ? 'segment--on' : ''"
+                :onclick="setPeriod(p)" :text="periodLabel(p)"></button>
       </div>
 
       <div class="lb-loading" :if="leaderboardLoading">Loading…</div>
@@ -380,7 +415,51 @@
         No data for this period yet.
       </p>
 
-      <div class="lb-table-wrap" :if="!leaderboardLoading && leaderboardRows.length > 0">
+      <div :if="!leaderboardLoading && leaderboardRows.length > 0">
+
+        <div class="temple-card">
+          <span class="temple-card-kicker" :text="'TEMPLE TOTAL · ' + periodLabel(leaderboardPeriod).toUpperCase()"></span>
+          <div class="temple-card-value" :text="leaderboardBooks().toLocaleString()"></div>
+          <div class="temple-card-caption"
+               :text="'books · ' + leaderboardRows.length + (leaderboardRows.length === 1 ? ' devotee' : ' devotees')"></div>
+        </div>
+
+        <!-- Your own row, pinned regardless of where it sorts. -->
+        <div class="rank-card" :if="myLeaderRow()">
+          <div class="rank-tile" :text="'#' + myLeaderRow().rank"></div>
+          <div class="rank-body">
+            <div class="rank-name" :text="'You — ' + myLeaderRow().distributor_name"></div>
+            <div class="rank-meta"
+                 :text="myLeaderRow().books + ' books · ' + myLeaderRow().points + ' pts · $' + (myLeaderRow().collected_cents / 100).toFixed(0)"></div>
+          </div>
+          <div class="rank-aside">
+            <div class="rank-streak" :if="streakDays > 1" :text="streakDays + '-day streak'"></div>
+            <div class="rank-gap" :if="leaderGap()" :text="leaderGap()"></div>
+          </div>
+        </div>
+
+        <div class="leader-list">
+          <div class="leader-card" :each="row in topLeaders()"
+               :class="row.distributor_name === userName ? 'leader-card--me' : ''">
+            <span class="leader-rank" :text="row.rank"></span>
+            <span class="leader-name" :text="row.distributor_name"></span>
+            <span class="leader-stat">
+              <b :text="row.books"></b><i>books</i>
+            </span>
+            <span class="leader-stat leader-stat--money">
+              <b :text="'$' + (row.collected_cents / 100).toFixed(0)"></b>
+              <i :text="row.bbt_pct == null ? 'BBT —' : 'BBT ' + Math.round(row.bbt_pct) + '%'"></i>
+            </span>
+          </div>
+
+          <button class="leader-more" :if="hiddenLeaderCount() > 0" :onclick="revealAllLeaders()"
+                  :text="'Show all ' + leaderboardRows.length + ' · sort by pts, $, BBT %'"></button>
+        </div>
+
+        <p class="lb-legend">BBT % is temple cost ÷ donation — lower means more stays with the temple.</p>
+      </div>
+
+      <div class="lb-table-wrap" :if="!leaderboardLoading && showAllLeaders && leaderboardRows.length > 0">
         <table class="lb-table">
           <thead>
             <tr>

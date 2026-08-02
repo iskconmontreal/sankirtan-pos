@@ -34,6 +34,54 @@ function _toCents(v) {
   return Math.round(parseFloat(v || 0) * 100) || 0;
 }
 
+// Local calendar day for a date-ish value, as YYYY-MM-DD. occurred_at is stored
+// day-resolution (…T00:00:00Z), so compare on the date part rather than parsing
+// to a local Date, which would shift the day west of UTC.
+function _dayKey(value) {
+  return String(value).slice(0, 10);
+}
+
+// YYYY-MM-DD from a Date's *local* parts. toISOString() would shift the day for
+// any timezone east of UTC, silently breaking the streak there.
+function _localDayKey(d) {
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+
+function _daysAgoISO(n) {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return d.toISOString().slice(0, 10);
+}
+
+// "today" / "yesterday" / "3 days ago" / a date once it stops being relatable.
+function _relativeDay(occurredAt) {
+  const then = _dayKey(occurredAt);
+  const days = Math.round((Date.parse(_todayISO()) - Date.parse(then)) / 86400000);
+  if (!Number.isFinite(days)) return '';
+  if (days <= 0) return 'today';
+  if (days === 1) return 'yesterday';
+  if (days < 7)  return `${days} days ago`;
+  return new Date(then + 'T00:00:00').toLocaleDateString('en-CA', { month: 'short', day: 'numeric' });
+}
+
+// Consecutive calendar days with at least one session, counting back from today
+// (or from yesterday — a devotee who has not been out yet today has not broken
+// the streak until the day ends).
+function _streakDays(dates) {
+  const days = new Set(dates.map(_dayKey));
+  if (days.size === 0) return 0;
+  const cursor = new Date(_todayISO() + 'T00:00:00');   // local midnight today
+  if (!days.has(_localDayKey(cursor))) cursor.setDate(cursor.getDate() - 1);
+  let streak = 0;
+  while (days.has(_localDayKey(cursor))) {
+    streak++;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  return streak;
+}
+
 function _readJSON(key, fallback) {
   try {
     const raw = localStorage.getItem(key);
@@ -104,6 +152,18 @@ export const state = sprae(document.body, {
   leaderboardSortBy:   'points',
   leaderboardSortDir:  'desc',
   lastDevotee:         '',
+
+  // Home stats, all derived from the leaderboard + own sessions.
+  statsLoading:        false,
+  myBooksYear:         0,
+  myPointsYear:        0,
+  myRank:              0,
+  streakDays:          0,
+  lastSessionLabel:    '',
+  lastSessionBooks:    0,
+  templeBooksMonth:    0,
+  templeDevoteesMonth: 0,
+  showAllLeaders:      false,
 
   archiveCount:  0,     // sessions stored on this device (submitted archive)
   repushing:     false,
@@ -635,6 +695,7 @@ export const state = sprae(document.body, {
       this._showToast(`✓ ${booksSubmitted} book(s) registered in Goloka — copy kept on this device.`);
       // Refresh catalog so next session sees the decremented stock.
       Catalog.loadBooks(true).then(() => this._refreshLanguages());
+      this.loadHomeStats();   // the submission just changed rank, streak and totals
     } catch (err) {
       console.warn('[DB] postSession failed:', err.message);
       Sessions.savePending(payload, key, auth.userId);
@@ -756,6 +817,48 @@ export const state = sprae(document.body, {
     this._showToast('Pending session(s) discarded.');
   },
 
+  // ── Home stats ─────────────────────────────────────────
+  // Everything the home and leaderboard screens show is derived from two
+  // endpoints the POS already reads. Deliberately non-blocking: the landing
+  // screen renders and "Start Session" works before (or without) these
+  // resolving, because the street is exactly where the network is worst.
+
+  async loadHomeStats() {
+    if (this.statsLoading) return;
+    this.statsLoading = true;
+    const me = this.userName;
+
+    const [year, month, sessions] = await Promise.all([
+      DB.getLeaderboard('year').catch(() => null),
+      DB.getLeaderboard('month').catch(() => null),
+      DB.getSessions({ distributor: me, from: _daysAgoISO(90) }).catch(() => null),
+    ]);
+
+    if (year && Array.isArray(year.results)) {
+      const rows = [...year.results].sort((a, b) => b.points - a.points);
+      const i = rows.findIndex(r => r.distributor_name === me);
+      const mine = i === -1 ? null : rows[i];
+      this.myBooksYear  = mine ? mine.books : 0;
+      this.myPointsYear = mine ? Math.round(mine.points * 100) / 100 : 0;
+      this.myRank       = i === -1 ? 0 : i + 1;
+    }
+
+    if (month && Array.isArray(month.results)) {
+      this.templeBooksMonth    = month.results.reduce((s, r) => s + (r.books || 0), 0);
+      this.templeDevoteesMonth = month.results.length;
+    }
+
+    if (Array.isArray(sessions)) {
+      const mySessions = sessions.filter(s => s.distributor_name === me);
+      const last = mySessions[0];
+      this.lastSessionLabel = last ? _relativeDay(last.occurred_at) : '';
+      this.lastSessionBooks = last ? last.total_books : 0;
+      this.streakDays       = _streakDays(mySessions.map(s => s.occurred_at));
+    }
+
+    this.statsLoading = false;
+  },
+
   // ── Leaderboard ────────────────────────────────────────
 
   gotoLeaderboard() {
@@ -779,7 +882,52 @@ export const state = sprae(document.body, {
 
   setPeriod(period) {
     this.leaderboardPeriod = period;
+    this.showAllLeaders    = false;
     this.loadLeaderboard();
+  },
+
+  // Concrete beats relative: "August" and "2026" say what you are looking at,
+  // where "This Month" / "This Year" need a second of thought.
+  periodLabel(period) {
+    if (period === 'month') return new Date().toLocaleDateString('en-CA', { month: 'long' });
+    if (period === 'year')  return String(new Date().getFullYear());
+    return 'All time';
+  },
+
+  myLeaderRow() {
+    return this.leaderboardRows.find(r => r.distributor_name === this.userName) || null;
+  },
+
+  // Distance to the devotee one place above, measured in whatever column the
+  // board is currently ranked by — quoting a book gap while ranked on points
+  // would name a target that does not actually close the gap. Returns '' when
+  // there is nothing meaningful to say (top place, or sorted by name).
+  leaderGap() {
+    const me = this.myLeaderRow();
+    if (!me || me.rank <= 1) return '';
+    const above = this.leaderboardRows.find(r => r.rank === me.rank - 1);
+    const col = this.leaderboardSortBy;
+    if (!above || col === 'distributor_name' || col === 'bbt_pct') return '';
+    const diff = (above[col] || 0) - (me[col] || 0);
+    if (diff <= 0) return '';
+    const target = ' to #' + (me.rank - 1);
+    if (col === 'collected_cents') return '$' + (diff / 100).toFixed(0) + target;
+    if (col === 'points')          return (Math.round(diff * 100) / 100) + ' pts' + target;
+    return diff + ' books' + target;
+  },
+
+  topLeaders() {
+    return this.showAllLeaders ? this.leaderboardRows : this.leaderboardRows.slice(0, 8);
+  },
+
+  hiddenLeaderCount() {
+    return Math.max(0, this.leaderboardRows.length - this.topLeaders().length);
+  },
+
+  revealAllLeaders() { this.showAllLeaders = true; },
+
+  leaderboardBooks() {
+    return this.leaderboardRows.reduce((s, r) => s + (r.books || 0), 0);
   },
 
   // Intuitive first-click direction: names A→Z; "more is better" metrics high→low;
@@ -1018,6 +1166,18 @@ export const state = sprae(document.body, {
       this.isOffline = true;
       this.retryPending();
     }
+
+    this.loadHomeStats();   // not awaited — the home screen fills in as it lands
+  },
+
+  // Initials for the header avatar: first letters of the display name.
+  userInitials() {
+    return (this.userName || '')
+      .split(/[\s&]+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map(w => w[0].toUpperCase())
+      .join('');
   },
 });
 
