@@ -213,12 +213,10 @@ export const state = sprae(document.body, {
   // ── Landing ────────────────────────────────────────────
 
   async startSession() {
-    // Starting over throws away any count still in progress, so confirm first —
-    // this is the one path that can discard a devotee's uncounted seva.
-    if (Sessions.getTotalBooks() > 0 &&
-        !confirm(`Start a new session? The ${Sessions.getTotalBooks()} book(s) already counted will be discarded.`)) {
-      return;
-    }
+    // No blocking prompt: report what was discarded in a toast instead, so the
+    // information is still surfaced without standing between the devotee and
+    // the street.
+    const discarded = Sessions.getTotalBooks();
 
     // Clear the persisted draft too, not just the in-memory count. Leaving it
     // behind meant a reload before the first tap (iOS evicts backgrounded tabs
@@ -240,6 +238,10 @@ export const state = sprae(document.body, {
       }));
     }
     this._syncTotals();
+
+    if (discarded > 0) {
+      this._showToast(`Started fresh — previous count of ${discarded} book(s) discarded.`);
+    }
   },
 
   // ── Books ──────────────────────────────────────────────
@@ -461,7 +463,11 @@ export const state = sprae(document.body, {
       // total, and a bare book count made that jump look like a miscount.
       parts.push('stack of ' + book.books_per_unit);
     } else if (typeof book.stock === 'number') {
-      if (book.stock <= 0)      parts.push('out of stock');
+      // Negative stock means more was distributed than the catalog knew about.
+      // Show the depth (−3, −10): a small overshoot is normal drift, a large one
+      // says the recorded stock is wrong and wants a physical recount.
+      if (book.stock < 0)       parts.push('out of stock (−' + Math.abs(book.stock) + ')');
+      else if (book.stock === 0) parts.push('out of stock');
       else if (book.stock <= 3) parts.push('last ' + book.stock);
       else                      parts.push(String(book.stock));
     }
@@ -509,7 +515,7 @@ export const state = sprae(document.body, {
   // previous outing, or a mis-tapped stack. Without this the only way back to
   // zero was decrementing every row by hand.
   clearCount() {
-    if (!confirm(`Clear all ${this.totalBooks} book(s) from this count?`)) return;
+    const cleared = this.totalBooks;
     Sessions.clear();
     this._clearDraft();
     this.summaryOpen = false;
@@ -519,7 +525,7 @@ export const state = sprae(document.body, {
     }));
     this._syncTotals();
     this.goto('books');
-    this._showToast('Count cleared.');
+    this._showToast(`Count cleared — ${cleared} book(s) removed.`);
   },
 
   // ── Collection ─────────────────────────────────────────
@@ -650,13 +656,8 @@ export const state = sprae(document.body, {
       return;
     }
 
-    // Books handed out with nothing collected is a real outcome, and goloka
-    // accepts a session with no payment lines. Confirm rather than block —
-    // blocking left the devotee with no way to record the distribution.
-    if (this.collectedCents <= 0 &&
-        !confirm(`Distributed ${this.totalBooks} book(s) with no donation collected?`)) {
-      return;
-    }
+    // Books handed out with nothing collected is a real outcome and goloka
+    // accepts a session with no payment lines, so $0 submits straight through.
 
     // One payment line per method with a positive amount; collected_cents is
     // derived server-side as the sum of these lines.
