@@ -4,7 +4,7 @@
 */
 
 import sprae from './vendor/sprae.js';
-import { CONFIG, LANG_LABELS, PAYMENT_METHODS } from './config.js';
+import { CONFIG, LANG_LABELS, COVER_LABELS, PAYMENT_METHODS } from './config.js';
 import { Catalog } from './catalog.js';
 import { Sessions } from './sessions.js';
 import { DB } from './db.js';
@@ -82,6 +82,8 @@ export const state = sprae(document.body, {
   sessionNote:      '',
   submitting:       false,
 
+  summaryOpen:      false,
+
   // Confirmation
   confirmResult:    null,
   confirmCountdown: 0,
@@ -143,8 +145,20 @@ export const state = sprae(document.body, {
   // ── Landing ────────────────────────────────────────────
 
   async startSession() {
+    // Starting over throws away any count still in progress, so confirm first —
+    // this is the one path that can discard a devotee's uncounted seva.
+    if (Sessions.getTotalBooks() > 0 &&
+        !confirm(`Start a new session? The ${Sessions.getTotalBooks()} book(s) already counted will be discarded.`)) {
+      return;
+    }
+
+    // Clear the persisted draft too, not just the in-memory count. Leaving it
+    // behind meant a reload before the first tap (iOS evicts backgrounded tabs
+    // on screen-lock) resurrected the previous session's count.
     Sessions.clear();
+    this._clearDraft();
     this.sessionLocation = '';
+    this.sessionNote     = '';
     this.goto('books');
 
     // Refresh book groups (reload if bookGroups is empty)
@@ -365,7 +379,9 @@ export const state = sprae(document.body, {
     const parts = [];
     if (book.retail_price_cents) parts.push('$' + (book.retail_price_cents / 100).toFixed(0));
     if (book.is_stack) {
-      parts.push(book.books_per_unit + ' books');
+      // Say "stack of 10", not "10 books": one tap on this row adds ten to the
+      // total, and a bare book count made that jump look like a miscount.
+      parts.push('stack of ' + book.books_per_unit);
     } else if (typeof book.stock === 'number') {
       if (book.stock <= 0)      parts.push('out of stock');
       else if (book.stock <= 3) parts.push('last ' + book.stock);
@@ -380,6 +396,52 @@ export const state = sprae(document.body, {
   // lost count is not. Over-stock still raises the existing warning toast.
   bookOut(book) {
     return !book.is_stack && typeof book.stock === 'number' && book.stock <= 0;
+  },
+
+  // ── Session summary ────────────────────────────────────
+  // Exactly what will be POSTed to Goloka, one row per counted title. Stacks
+  // are the reason this exists: a stack row adds books_per_unit to the total
+  // per tap, so a total can outrun what the devotee remembers tapping. Showing
+  // the arithmetic per line makes that legible instead of alarming.
+
+  sessionLines() {
+    return Sessions.entries
+      .filter(e => e.qty > 0)
+      .map(e => {
+        const per = e.books_per_unit || 1;
+        return {
+          title:  e.title,
+          // Soft and hard variants share a title, so the summary needs the same
+          // disambiguation the picker rows carry.
+          cover:  COVER_LABELS[String(e.category || '')[0]] ? COVER_LABELS[String(e.category)[0]].toUpperCase() : '',
+          qty:    e.qty,
+          per,
+          books:  e.qty * per,
+          points: Math.round(e.qty * (e.points_per_unit || 0) * 100) / 100,
+          isStack: per > 1,
+        };
+      })
+      .sort((a, b) => b.books - a.books);
+  },
+
+  openSummary()  { this.summaryOpen = true; },
+  closeSummary() { this.summaryOpen = false; },
+
+  // Escape hatch for a count that is simply wrong — a recovered draft from a
+  // previous outing, or a mis-tapped stack. Without this the only way back to
+  // zero was decrementing every row by hand.
+  clearCount() {
+    if (!confirm(`Clear all ${this.totalBooks} book(s) from this count?`)) return;
+    Sessions.clear();
+    this._clearDraft();
+    this.summaryOpen = false;
+    this.bookGroups = this.bookGroups.map(group => ({
+      ...group,
+      books: group.books.map(b => ({ ...b, qty: 0 })),
+    }));
+    this._syncTotals();
+    this.goto('books');
+    this._showToast('Count cleared.');
   },
 
   // ── Collection ─────────────────────────────────────────

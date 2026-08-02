@@ -202,9 +202,11 @@
         </div>
       </div>
 
-      <!-- Sticky totals bar (only when at least one book is added) -->
+      <!-- Sticky totals bar (only when at least one book is added). Tapping the
+           totals opens the line-by-line summary — the fastest way to see why a
+           total is what it is (stacks) and to clear a wrong count. -->
       <div class="totals-bar" :if="totalBooks > 0">
-        <div class="totals-summary">
+        <button class="totals-summary" :onclick="openSummary()" aria-label="Show session summary">
           <div class="totals-line">
             <span class="totals-item" :text="totalBooks + (totalBooks === 1 ? ' book' : ' books')"></span>
             <span class="totals-sep">·</span>
@@ -214,9 +216,9 @@
           </div>
           <!-- Truthful because _saveDraft() runs on every qty change and flips
                storageError the moment a write actually fails. -->
-          <div class="totals-saved" :if="!storageError">Saved on this device ✓</div>
+          <div class="totals-saved" :if="!storageError">Saved on this device ✓ · tap to review</div>
           <div class="totals-saved totals-saved--err" :if="storageError">Not saved — keep this page open</div>
-        </div>
+        </button>
         <button class="btn btn-primary btn-next" :onclick="gotoCollection()">Next →</button>
       </div>
 
@@ -224,6 +226,28 @@
 
     <!-- ───────────── STEP: COLLECTION ───────────── -->
     <section class="step-section" :if="step === 'collection'">
+
+      <!-- Exactly what will be registered in Goloka, before any money is keyed. -->
+      <div class="summary-card">
+        <div class="summary-head">
+          <span class="sheet-title">This session</span>
+          <button class="link-btn link-btn--danger" :onclick="clearCount()">Clear count</button>
+        </div>
+        <div class="sum-list">
+          <div class="sum-row" :each="line in sessionLines()">
+            <span class="sum-title" :title="line.title" :text="line.title"></span>
+            <span class="cover-pill" :if="line.cover"
+                  :class="line.cover === 'HARD' ? 'cover-pill--hard' : 'cover-pill--soft'"
+                  :text="line.cover"></span>
+            <span class="sum-qty" :text="line.isStack ? line.qty + ' × stack of ' + line.per : '× ' + line.qty"></span>
+            <span class="sum-books" :text="line.books"></span>
+          </div>
+        </div>
+        <div class="sum-foot">
+          <span :text="totalBooks + (totalBooks === 1 ? ' book' : ' books')"></span>
+          <span class="sum-foot-pts" :text="totalPoints + ' pts'"></span>
+        </div>
+      </div>
 
       <div class="payment-block">
         <label class="field-label">How it was collected</label>
@@ -344,6 +368,30 @@
     </section>
 
   </main>
+
+  <!-- ═══════════════════ SESSION SUMMARY SHEET ═══════════════════ -->
+  <div class="sheet-backdrop" :if="summaryOpen" :onclick="closeSummary()"></div>
+  <div class="sheet" :if="summaryOpen" role="dialog" aria-label="Session summary">
+    <div class="sheet-head">
+      <span class="sheet-title">This session</span>
+      <button class="sheet-close" :onclick="closeSummary()" aria-label="Close">✕</button>
+    </div>
+    <div class="sum-list">
+      <div class="sum-row" :each="line in sessionLines()">
+        <span class="sum-title" :title="line.title" :text="line.title"></span>
+        <span class="cover-pill" :if="line.cover"
+              :class="line.cover === 'HARD' ? 'cover-pill--hard' : 'cover-pill--soft'"
+              :text="line.cover"></span>
+        <span class="sum-qty" :text="line.isStack ? line.qty + ' × stack of ' + line.per : '× ' + line.qty"></span>
+        <span class="sum-books" :text="line.books"></span>
+      </div>
+    </div>
+    <div class="sum-foot">
+      <span :text="totalBooks + (totalBooks === 1 ? ' book' : ' books')"></span>
+      <span class="sum-foot-pts" :text="totalPoints + ' pts'"></span>
+    </div>
+    <button class="btn btn-outline-dark btn-block sum-clear" :onclick="clearCount()">Clear count</button>
+  </div>
 
   <!-- ═══════════════════ LANGUAGE SHEET ═══════════════════ -->
   <div class="sheet-backdrop" :if="langSheetOpen" :onclick="closeLangSheet()"></div>

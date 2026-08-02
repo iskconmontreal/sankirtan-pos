@@ -414,6 +414,86 @@ body {
   gap: var(--s-sm);
 }
 
+/* ── Session summary (sheet + inline card on collection) ── */
+.summary-card {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-lg);
+  padding: var(--s-md);
+  margin-bottom: var(--s-lg);
+}
+
+.summary-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-sm);
+  margin-bottom: var(--s-sm);
+}
+
+.sum-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 45vh;
+  overflow-y: auto;
+}
+
+.sum-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-sm);
+  padding: 7px 0;
+  border-bottom: 1px solid var(--c-hairline);
+}
+.sum-row:last-child { border-bottom: none; }
+
+.sum-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.813rem;
+  font-weight: 600;
+  color: var(--c-text);
+}
+
+.sum-qty {
+  font-size: 0.719rem;
+  color: var(--c-text-dim);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.sum-books {
+  font-size: 0.813rem;
+  font-weight: 700;
+  color: var(--c-text);
+  font-variant-numeric: tabular-nums;
+  min-width: 2.25rem;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.sum-foot {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s-sm);
+  margin-top: var(--s-sm);
+  padding-top: var(--s-sm);
+  border-top: 1px solid var(--c-border);
+  font-size: var(--f-md);
+  font-weight: 700;
+  color: var(--c-text);
+}
+.sum-foot-pts { color: var(--c-text-dim); font-weight: 600; font-size: var(--f-sm); }
+
+.sum-clear { margin-top: var(--s-md); }
+
+.link-btn--danger { color: var(--c-err); }
+.link-btn--danger:hover { color: var(--c-err); text-decoration: underline; }
+
 /* Group header: a light rule with the size name and its point value, instead of
    a full-width solid saffron bar repeated seven times down the page. */
 .book-group { margin-bottom: var(--s-lg); }
@@ -649,8 +729,15 @@ body {
 .totals-summary {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: 1px;
   min-width: 0;
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
 .totals-line {
