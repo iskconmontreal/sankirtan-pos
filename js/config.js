@@ -15,8 +15,8 @@ export const CONFIG = {
     PENDING:       'sankirtan_pending', // queued failed submissions
     RECENT:        'sankirtan_recent',  // last submitted sessions
     DRAFT:         'sankirtan_draft',   // in-progress count; cleared only on confirmed Goloka submit
-    LANGUAGE:      'sankirtan_language',      // last language filter, restored on load
-    RECENT_LANGS:  'sankirtan_recent_langs',  // recently used languages, drives the inline pills
+    LANGUAGE:      'sankirtan_language',   // last language filter, restored on load
+    SIZE_ORDER:    'sankirtan_size_order', // 'desc' (Mahabig first) | 'asc'
   },
 };
 
@@ -55,6 +55,10 @@ export const LANG_LABELS = {
 };
 
 export const LANG_ORDER = ['English', 'French', 'Spanish', 'Arabic', 'Bengali', 'Hindi'];
+
+// Always shown in the language bar; picking another language adds a pill
+// beside these rather than replacing one.
+export const ANCHOR_LANGUAGES = ['English', 'French', 'Spanish'];
 
 // Payment methods offered at the POS. A session's donation can be split across
 // several methods; the collector keys each one independently and the total is the

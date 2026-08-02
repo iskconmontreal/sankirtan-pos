@@ -201,21 +201,61 @@
 
       <div class="catalog-notice" :if="catalogNotice" :text="catalogNotice"></div>
 
-      <!-- One row, never two: the three most-used languages inline, the rest
-           behind "+N". Eleven wrapped chips used to push every book below the fold. -->
-      <div class="lang-bar" :if="bookLanguages.length > 1">
+      <div class="search-bar">
+        <span class="search-icon" aria-hidden="true">⌕</span>
+        <input class="search-input" type="search" inputmode="search"
+               placeholder="Search all languages…"
+               :value="searchQuery" :oninput="onSearchInput">
+        <button class="search-clear" :if="searchQuery" :onclick="clearSearch()" aria-label="Clear search">✕</button>
+      </div>
+
+      <!-- One row, never two: anchor languages inline, the rest behind "+N". -->
+      <div class="lang-bar" :if="!searchQuery">
         <button class="lang-pill" :each="lang in primaryLanguages()"
                 :class="selectedLanguage === lang ? 'lang-pill--on' : ''"
                 :onclick="setLanguage(lang)" :text="langLabel(lang)"></button>
-        <span class="lang-spacer"></span>
         <button class="lang-more" :if="overflowLanguages().length > 0"
                 :onclick="openLangSheet()"
                 :text="'+' + overflowLanguages().length + ' ▾'"></button>
+        <span class="lang-spacer"></span>
+        <button class="size-toggle" :onclick="toggleSizeOrder()"
+                :text="sizeOrder === 'desc' ? 'Big first ⇅' : 'Small first ⇅'"></button>
+      </div>
+
+      <!-- Search results: flat, every language, filter ignored. -->
+      <div :if="searchQuery">
+        <p class="empty-msg" :if="searchResults.length === 0">
+          No title matches “<span :text="searchQuery"></span>”.
+        </p>
+        <div :each="book in searchResults"
+             :class="bookOut(book) ? 'book-row book-row--out' : 'book-row'">
+          <div class="book-info">
+            <div class="book-line">
+              <span class="book-title" :title="book.title" :text="book.title"></span>
+              <span class="cover-pill" :if="book.coverPill"
+                    :class="book.coverKey === 'H' ? 'cover-pill--hard' : 'cover-pill--soft'"
+                    :text="book.coverPill"></span>
+            </div>
+            <span class="book-meta">
+              <span class="book-lang" :text="langLabel(book.language)"></span>
+              <span :text="bookMeta(book) ? ' · ' + bookMeta(book) : ''"></span>
+            </span>
+          </div>
+          <div class="qty-controls">
+            <button class="qty-btn qty-btn--minus" :onclick="decQty(book)"
+                    :class="book.qty > 0 ? '' : 'is-zero'" aria-label="Remove one">−</button>
+            <input class="qty-input" type="text" inputmode="numeric" placeholder="0"
+                   :class="book.qty > 0 ? '' : 'is-zero'"
+                   :value="book.qty || ''" onfocus="this.select()"
+                   :oninput="e => setBookQty(book, e.target.value)">
+            <button class="qty-btn qty-btn--plus" :onclick="incQty(book)" aria-label="Add one">+</button>
+          </div>
+        </div>
       </div>
 
       <!-- Skeleton: three group headers, two rows each — keeps the layout stable
            instead of collapsing to a one-line "Loading…" and jumping. -->
-      <div class="book-skeleton" :if="catalogLoading" aria-hidden="true">
+      <div class="book-skeleton" :if="catalogLoading && !searchQuery" aria-hidden="true">
         <div :each="g in [1,2,3]" class="skel-group">
           <div class="skel-head"></div>
           <div :each="r in [1,2]" class="skel-row">
@@ -225,7 +265,7 @@
         </div>
       </div>
 
-      <div :each="group in bookGroups" class="book-group">
+      <div :if="!searchQuery" :each="group in bookGroups" class="book-group">
         <div class="book-group-header">
           <span class="book-group-label" :text="group.label"></span>
           <span class="book-group-pts" :if="group.points != null" :text="group.points + ' pt'"></span>

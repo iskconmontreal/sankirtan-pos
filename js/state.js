@@ -4,7 +4,7 @@
 */
 
 import sprae from './vendor/sprae.js';
-import { CONFIG, LANG_LABELS, COVER_LABELS, PAYMENT_METHODS, PRIMARY_PAYMENT_COUNT } from './config.js';
+import { CONFIG, LANG_LABELS, COVER_LABELS, PAYMENT_METHODS, PRIMARY_PAYMENT_COUNT, ANCHOR_LANGUAGES } from './config.js';
 import { Catalog } from './catalog.js';
 import { Sessions } from './sessions.js';
 import { DB } from './db.js';
@@ -115,8 +115,10 @@ export const state = sprae(document.body, {
   bookGroups:       [],
   bookLanguages:    [],
   selectedLanguage: localStorage.getItem(CONFIG.STORAGE_KEYS.LANGUAGE) || '',
-  recentLanguages:  _readJSON(CONFIG.STORAGE_KEYS.RECENT_LANGS, []),
+  sizeOrder:        localStorage.getItem(CONFIG.STORAGE_KEYS.SIZE_ORDER) === 'asc' ? 'asc' : 'desc',
   langSheetOpen:    false,
+  searchQuery:      '',
+  searchResults:    [],
   catalogLoading:   false,
   catalogNotice:    '',
   totalBooks:     0,
@@ -284,6 +286,7 @@ export const state = sprae(document.body, {
       ...group,
       books: group.books.map(b => ({ ...b, qty: Sessions.getQty(b.id) })),
     }));
+    if (this.searchQuery) this._runSearch();
   },
 
   // Totals-only refresh for the numeric qty input: updates the scalar totals
@@ -375,7 +378,7 @@ export const state = sprae(document.body, {
     this.allMethodsOpen = this.splitOpen;
 
     // Rebuild the book list for the saved language and overlay the saved qtys
-    this.bookGroups = Catalog.groupedBooks(this.selectedLanguage);
+    this._rebuildGroups();
     this._syncTotals();
     this._syncCollected();
 
@@ -402,30 +405,53 @@ export const state = sprae(document.body, {
     if (!this.selectedLanguage || !this.bookLanguages.includes(this.selectedLanguage)) {
       this.selectedLanguage = this.bookLanguages[0] || '';
     }
-    this.bookGroups = Catalog.groupedBooks(this.selectedLanguage);
+    this._rebuildGroups();
+  },
+
+  _rebuildGroups() {
+    this.bookGroups = Catalog.groupedBooks(this.selectedLanguage, this.sizeOrder);
+    if (this.searchQuery) this._runSearch();
+  },
+
+  onSearchInput(e) {
+    this.searchQuery = e.target.value;
+    this._runSearch();
+  },
+
+  clearSearch() {
+    this.searchQuery   = '';
+    this.searchResults = [];
+  },
+
+  _runSearch() {
+    this.searchResults = Catalog.search(this.searchQuery)
+      .map(b => ({ ...b, qty: Sessions.getQty(b.id) }));
+  },
+
+  toggleSizeOrder() {
+    this.sizeOrder = this.sizeOrder === 'desc' ? 'asc' : 'desc';
+    try { localStorage.setItem(CONFIG.STORAGE_KEYS.SIZE_ORDER, this.sizeOrder); } catch (_) {}
+    this._rebuildGroups();
+    this._syncTotals();
   },
 
   setLanguage(lang) {
     this.selectedLanguage = lang;
     this.langSheetOpen    = false;
-    this.recentLanguages  = [lang, ...this.recentLanguages.filter(l => l !== lang)].slice(0, 6);
-    try {
-      localStorage.setItem(CONFIG.STORAGE_KEYS.LANGUAGE, lang);
-      localStorage.setItem(CONFIG.STORAGE_KEYS.RECENT_LANGS, JSON.stringify(this.recentLanguages));
-    } catch (_) {}
-    this.bookGroups = Catalog.groupedBooks(lang);
+    try { localStorage.setItem(CONFIG.STORAGE_KEYS.LANGUAGE, lang); } catch (_) {}
+    this._rebuildGroups();
     this._syncTotals();
     this._saveDraft();
   },
 
-  // Three languages inline, the rest behind "+N".
+  // English/French/Spanish are permanent; a fourth pill appears when the
+  // selected language isn't one of them.
   primaryLanguages() {
-    const recent = this.recentLanguages.filter(l => this.bookLanguages.includes(l));
-    const top = [...recent, ...this.bookLanguages.filter(l => !recent.includes(l))].slice(0, 3);
-    if (this.selectedLanguage && !top.includes(this.selectedLanguage)) {
-      top[top.length - 1] = this.selectedLanguage;
+    const anchors = ANCHOR_LANGUAGES.filter(l => this.bookLanguages.includes(l));
+    if (this.selectedLanguage && !anchors.includes(this.selectedLanguage)) {
+      return [...anchors, this.selectedLanguage];
     }
-    return top;
+    return anchors;
   },
 
   overflowLanguages() {

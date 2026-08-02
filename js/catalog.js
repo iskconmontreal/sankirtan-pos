@@ -11,6 +11,11 @@ import { DB } from './db.js';
 // can't false-positive.
 const SET_TITLE_RE = /\bsets?\b/i;
 
+// Lowercase and strip diacritics, so a search ignores accents entirely.
+const _fold = (s) => String(s || '')
+  .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase().trim();
+
 // Books → picker rows: title-sorted, qty zeroed (state.js re-hydrates the qtys).
 const _rows = (books) => books
   .sort((a, b) => a.title.localeCompare(b.title))
@@ -120,7 +125,9 @@ export const Catalog = {
   // hide a title. Excluded from the BBT score ≠ excluded from distribution, and a
   // book with no size tier yet (S0/H0, page count still missing) is still being
   // handed out. Those land in their own groups instead of being dropped.
-  groupedBooks(language) {
+  // `order`: 'desc' = Mahabig first (default), 'asc' = Small first. Only the
+  // scored size groups reorder; Sets/Other/Stacks always trail.
+  groupedBooks(language, order = 'desc') {
     const source = language
       ? Catalog.books.filter(b => b.language === language)
       : Catalog.books;
@@ -146,7 +153,8 @@ export const Catalog = {
       }
     });
 
-    const groups = SIZE_ORDER
+    const sizes = order === 'asc' ? [...SIZE_ORDER].reverse() : SIZE_ORDER;
+    const groups = sizes
       .filter(size => bySize[size])
       .map(size => ({
         sizeKey: size,
@@ -180,6 +188,25 @@ export const Catalog = {
       groups.push({ sizeKey: 'stack', label: 'Stacks', points: null, books: stacks });
     }
     return groups;
+  },
+
+  // Search every language at once — a devotee looking for "gita" wants the
+  // French and Spanish editions too, whatever the language filter says.
+  // Accent-insensitive so "gita" matches "Gītā" and "bhagavad" matches "Bhagavad-gītā".
+  search(query) {
+    const q = _fold(query);
+    if (!q) return [];
+    return Catalog.books
+      .filter(b => _fold(b.title).includes(q))
+      .map(b => ({
+        ...b,
+        qty: 0,
+        stock: b.is_stack ? Catalog._stackStock(b) : b.stock,
+        coverKey: String(b.category || '')[0],
+        coverPill: COVER_LABELS[String(b.category || '')[0]]?.toUpperCase() || '',
+      }))
+      .sort((a, b) => a.title.localeCompare(b.title))
+      .slice(0, 40);
   },
 
   // ── localStorage helpers ────────────────────────────────
