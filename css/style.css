@@ -1218,16 +1218,104 @@ body {
 /* ════════════════════════════════════════
    LOGIN
    ════════════════════════════════════════ */
-.login-card {
-  background: var(--c-surface);
-  border-radius: var(--r-md);
-  box-shadow: var(--sh-sm);
-  padding: 22px 20px;
-  max-width: 420px;
-  margin: var(--s-lg) auto 0;
+/* Full-bleed brand band + auth block. Breaks out of #app-main's padding so the
+   band reaches the edges on a phone, where a floating card wasted the viewport. */
+.login-brand {
+  margin: calc(var(--s-md) * -1) calc(var(--s-md) * -1) 0;
+  padding: var(--s-lg) var(--s-lg) var(--s-lg);
+  min-height: 200px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  position: relative;
+  background:
+    repeating-linear-gradient(135deg, rgba(255,255,255,.05) 0 12px, transparent 12px 24px),
+    var(--c-sankirtan-strong);
+  color: var(--c-white);
 }
 
-.login-card .text-input { margin-bottom: var(--s-md); }
+.login-brand-top {
+  position: absolute;
+  top: 20px;
+  left: var(--s-lg);
+  right: var(--s-lg);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.login-brand-org {
+  font-size: 0.688rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+
+.login-wordmark {
+  font-size: 1.875rem;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+}
+
+.login-sub {
+  font-size: var(--f-sm);
+  line-height: 1.4;
+  opacity: 0.8;
+  margin-top: 6px;
+}
+
+.login-auth {
+  margin: 0 calc(var(--s-md) * -1);
+  padding: 26px var(--s-lg) 30px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.login-auth .text-input { margin-bottom: var(--s-md); }
+
+.login-rule {
+  height: 1px;
+  background: var(--c-border);
+  margin: 6px 0;
+}
+
+.login-email-link {
+  display: block;
+  width: 100%;
+  text-align: center;
+  font-size: 0.813rem;
+  color: var(--c-sankirtan-strong);
+}
+
+.login-help {
+  font-size: 0.719rem;
+  line-height: 1.5;
+  color: var(--c-text-dim);
+  text-align: center;
+}
+
+.login-offline {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 10px;
+  border-radius: 11px;
+  background: var(--c-ok-active);
+  color: #2d7a55;
+  font-size: 0.719rem;
+}
+
+.login-offline-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--c-ok);
+  flex-shrink: 0;
+}
 
 .login-hint {
   font-size: 0.85rem;

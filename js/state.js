@@ -59,6 +59,7 @@ export const state = sprae(document.body, {
   authOtp:     '',
   authError:   '',
   authLoading: false,
+  emailFormOpen: false,   // the email form is behind a link; Google leads
   userName:    '',   // display name of the logged-in devotee
 
   // Books / catalog. The language filter is remembered across sessions — most
@@ -815,10 +816,24 @@ export const state = sprae(document.body, {
   // devices), and Google is a one-tap alternative.
 
   _showLogin() {
-    this.authStep     = 'email';
-    this.authPassword = '';
-    this.authOtp      = '';
+    this.authStep      = 'email';
+    this.authPassword  = '';
+    this.authOtp       = '';
+    this.emailFormOpen = false;
     this.goto('login');
+  },
+
+  openEmailForm()  { this.emailFormOpen = true;  this.authError = ''; },
+  closeEmailForm() { this.emailFormOpen = false; this.authError = ''; },
+
+  // "Different email" / "Start over" from the password and OTP steps return to
+  // the email field, not to the Google-first screen the devotee already left.
+  restartEmail() {
+    this.authStep      = 'email';
+    this.authPassword  = '';
+    this.authOtp       = '';
+    this.emailFormOpen = true;
+    this.authError     = '';
   },
 
   async authSubmitEmail() {
