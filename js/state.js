@@ -82,6 +82,46 @@ function _streakDays(dates) {
   return streak;
 }
 
+// Calendar month `offset` months back. `to` is the FIRST day of the next month:
+// goloka compares occurred_at (RFC3339) to the raw string, so "2026-08-31" would
+// sort before "2026-08-31T00:00:00Z" and drop the last day's sessions.
+function _monthRange(offset) {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth() - offset, 1);
+  const next  = new Date(start.getFullYear(), start.getMonth() + 1, 1);
+  const sameYear = start.getFullYear() === now.getFullYear();
+  return {
+    from:  _localDayKey(start),
+    to:    _localDayKey(next),
+    label: start.toLocaleDateString('en-CA',
+      sameYear ? { month: 'long' } : { month: 'long', year: 'numeric' }),
+  };
+}
+
+// Sessions → leaderboard rows, matching the shape of GET /leaderboard so the
+// cards, sorting and table work identically for a past month.
+function _aggregateSessions(sessions) {
+  const by = new Map();
+  for (const s of sessions) {
+    const name = s.distributor_name || '—';
+    const row = by.get(name) || {
+      distributor_name: name, books: 0, points: 0,
+      collected_cents: 0, cost_cents: 0, session_count: 0, bbt_pct: null,
+    };
+    row.books           += s.total_books || 0;
+    row.points          += s.total_points || 0;
+    row.collected_cents += s.collected_cents || 0;
+    row.cost_cents      += s.total_cost_cents || 0;
+    row.session_count   += 1;
+    by.set(name, row);
+  }
+  return [...by.values()].map(r => ({
+    ...r,
+    points:  Math.round(r.points * 100) / 100,
+    bbt_pct: r.collected_cents > 0 ? (r.cost_cents / r.collected_cents) * 100 : null,
+  }));
+}
+
 function _readJSON(key, fallback) {
   try {
     const raw = localStorage.getItem(key);
@@ -153,6 +193,7 @@ export const state = sprae(document.body, {
   leaderboardLoading:  false,
   leaderboardSortBy:   'points',
   leaderboardSortDir:  'desc',
+  monthOffset:         0,   // 0 = current month, 1 = last month, …
   lastDevotee:         '',
 
   // Home stats, all derived from the leaderboard + own sessions.
@@ -164,6 +205,7 @@ export const state = sprae(document.body, {
   lastSessionLabel:    '',
   lastSessionBooks:    0,
   templeBooksMonth:    0,
+  templeLocations:     [],
   templeDevoteesMonth: 0,
   showAllLeaders:      false,
 
@@ -625,8 +667,12 @@ export const state = sprae(document.body, {
   },
 
   // ── Location ───────────────────────────────────────────
+  // Spots the whole temple has used recently, from goloka, so a devotee heading
+  // to a street or festival someone else covered gets the same chip. Falls back
+  // to this device's archive offline.
 
   recentLocations() {
+    if (this.templeLocations.length > 0) return this.templeLocations;
     const seen = [];
     for (const entry of Sessions.getRecent()) {
       const loc = ((entry.payload && entry.payload.location) || '').trim();
@@ -833,10 +879,11 @@ export const state = sprae(document.body, {
     this.statsLoading = true;
     const me = this.userName;
 
-    const [year, month, sessions] = await Promise.all([
+    const [year, month, sessions, templeSessions] = await Promise.all([
       DB.getLeaderboard('year').catch(() => null),
       DB.getLeaderboard('month').catch(() => null),
       DB.getSessions({ distributor: me, from: _daysAgoISO(90) }).catch(() => null),
+      DB.getSessions({ from: _daysAgoISO(30) }).catch(() => null),
     ]);
 
     if (year && Array.isArray(year.results)) {
@@ -861,6 +908,16 @@ export const state = sprae(document.body, {
       this.streakDays       = _streakDays(mySessions.map(s => s.occurred_at));
     }
 
+    if (Array.isArray(templeSessions)) {
+      const seen = [];
+      for (const session of templeSessions) {
+        const loc = (session.location || '').trim();
+        if (loc && !seen.includes(loc)) seen.push(loc);
+        if (seen.length >= 4) break;
+      }
+      this.templeLocations = seen;
+    }
+
     this.statsLoading = false;
   },
 
@@ -875,8 +932,16 @@ export const state = sprae(document.body, {
     this.leaderboardLoading = true;
     this.leaderboardRows    = [];
     try {
-      const data = await DB.getLeaderboard(this.leaderboardPeriod);
-      this.leaderboardRows = data.results;
+      // A past month has no endpoint of its own — aggregate its sessions into
+      // the same row shape the leaderboard endpoint returns.
+      let rows;
+      if (this.leaderboardPeriod === 'month' && this.monthOffset > 0) {
+        const { from, to } = _monthRange(this.monthOffset);
+        rows = _aggregateSessions(await DB.getSessions({ from, to }) || []);
+      } else {
+        rows = (await DB.getLeaderboard(this.leaderboardPeriod)).results;
+      }
+      this.leaderboardRows = rows;
       this.applyLeaderboardSort();   // sorts by the active column + numbers rank
     } catch (err) {
       console.warn('[Leaderboard] Failed:', err.message);
@@ -888,15 +953,26 @@ export const state = sprae(document.body, {
   setPeriod(period) {
     this.leaderboardPeriod = period;
     this.showAllLeaders    = false;
+    if (period !== 'month') this.monthOffset = 0;
     this.loadLeaderboard();
   },
 
   // Concrete beats relative: "August" and "2026" say what you are looking at,
   // where "This Month" / "This Year" need a second of thought.
   periodLabel(period) {
-    if (period === 'month') return new Date().toLocaleDateString('en-CA', { month: 'long' });
+    if (period === 'month') return _monthRange(this.monthOffset).label;
     if (period === 'year')  return String(new Date().getFullYear());
     return 'All time';
+  },
+
+  // Step back through months; never past the current one.
+  stepMonth(delta) {
+    const next = this.monthOffset + delta;
+    if (next < 0) return;
+    this.monthOffset       = next;
+    this.leaderboardPeriod = 'month';
+    this.showAllLeaders    = false;
+    this.loadLeaderboard();
   },
 
   myLeaderRow() {

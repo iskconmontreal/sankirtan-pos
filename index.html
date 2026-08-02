@@ -443,9 +443,18 @@
     <!-- ───────────── STEP: LEADERBOARD ───────────── -->
     <section class="step-section" :if="step === 'leaderboard'">
 
-      <!-- Segmented control -->
+      <!-- Segmented control; the month segment steps through past months. -->
       <div class="segmented">
-        <button class="segment" :each="p in ['month', 'year', 'all']"
+        <div class="segment segment--month"
+             :class="leaderboardPeriod === 'month' ? 'segment--on' : ''">
+          <button class="month-step" :if="leaderboardPeriod === 'month'"
+                  :onclick="stepMonth(1)" aria-label="Previous month">‹</button>
+          <button class="month-label" :onclick="setPeriod('month')" :text="periodLabel('month')"></button>
+          <button class="month-step" :if="leaderboardPeriod === 'month'"
+                  :onclick="stepMonth(-1)" :disabled="monthOffset === 0"
+                  aria-label="Next month">›</button>
+        </div>
+        <button class="segment" :each="p in ['year', 'all']"
                 :class="leaderboardPeriod === p ? 'segment--on' : ''"
                 :onclick="setPeriod(p)" :text="periodLabel(p)"></button>
       </div>
