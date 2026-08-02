@@ -196,9 +196,6 @@ export const state = sprae(document.body, {
     this.goto(backMap[this.step] || 'landing');
   },
 
-  // The screen title lives in the header bar rather than repeating as an H2
-  // inside the scroll area, which cost ~60px above the fold on every screen.
-
   headerTitle() {
     return { books: 'Books distributed', collection: 'Collection', leaderboard: 'Leaderboard' }[this.step]
       || 'Sankirtan POS';
@@ -213,14 +210,10 @@ export const state = sprae(document.body, {
   // ── Landing ────────────────────────────────────────────
 
   async startSession() {
-    // No blocking prompt: report what was discarded in a toast instead, so the
-    // information is still surfaced without standing between the devotee and
-    // the street.
     const discarded = Sessions.getTotalBooks();
 
-    // Clear the persisted draft too, not just the in-memory count. Leaving it
-    // behind meant a reload before the first tap (iOS evicts backgrounded tabs
-    // on screen-lock) resurrected the previous session's count.
+    // Clear the draft too — otherwise a reload before the first tap (iOS evicts
+    // backgrounded tabs on screen-lock) resurrects the previous count.
     Sessions.clear();
     this._clearDraft();
     this.sessionLocation = '';
@@ -425,10 +418,7 @@ export const state = sprae(document.body, {
     this._saveDraft();
   },
 
-  // The bar shows three languages and hides the rest behind "+N". Ordering is
-  // most-recently-used first so a devotee's own languages surface, and the
-  // active one is always present even when it hasn't been used lately —
-  // otherwise the bar would show a filter that isn't the one in effect.
+  // Three languages inline, the rest behind "+N".
   primaryLanguages() {
     const recent = this.recentLanguages.filter(l => this.bookLanguages.includes(l));
     const top = [...recent, ...this.bookLanguages.filter(l => !recent.includes(l))].slice(0, 3);
@@ -463,9 +453,7 @@ export const state = sprae(document.body, {
       // total, and a bare book count made that jump look like a miscount.
       parts.push('stack of ' + book.books_per_unit);
     } else if (typeof book.stock === 'number') {
-      // Negative stock means more was distributed than the catalog knew about.
-      // Show the depth (−3, −10): a small overshoot is normal drift, a large one
-      // says the recorded stock is wrong and wants a physical recount.
+      // Depth matters: −1 is drift, −10 means the recorded stock is wrong.
       if (book.stock < 0)       parts.push('out of stock (−' + Math.abs(book.stock) + ')');
       else if (book.stock === 0) parts.push('out of stock');
       else if (book.stock <= 3) parts.push('last ' + book.stock);
@@ -474,19 +462,15 @@ export const state = sprae(document.body, {
     return parts.join(' · ');
   },
 
-  // Dim a row whose recorded stock is exhausted. The "+" stays live on purpose:
-  // stock records drift, and a devotee who actually handed the book out must
-  // still be able to record it — an inaccurate stock count is recoverable, a
-  // lost count is not. Over-stock still raises the existing warning toast.
+  // Dimmed, but "+" stays live: an inaccurate stock count is recoverable,
+  // a lost count is not.
   bookOut(book) {
     return !book.is_stack && typeof book.stock === 'number' && book.stock <= 0;
   },
 
   // ── Session summary ────────────────────────────────────
-  // Exactly what will be POSTed to Goloka, one row per counted title. Stacks
-  // are the reason this exists: a stack row adds books_per_unit to the total
-  // per tap, so a total can outrun what the devotee remembers tapping. Showing
-  // the arithmetic per line makes that legible instead of alarming.
+  // Exactly what will be POSTed, one row per counted title. Stacks are why it
+  // exists: one tap adds books_per_unit, so the total can outrun the taps.
 
   sessionLines() {
     return Sessions.entries
@@ -511,9 +495,8 @@ export const state = sprae(document.body, {
   openSummary()  { this.summaryOpen = true; },
   closeSummary() { this.summaryOpen = false; },
 
-  // Escape hatch for a count that is simply wrong — a recovered draft from a
-  // previous outing, or a mis-tapped stack. Without this the only way back to
-  // zero was decrementing every row by hand.
+  // Escape hatch for a wrong count — otherwise the only way back to zero was
+  // decrementing every row by hand.
   clearCount() {
     const cleared = this.totalBooks;
     Sessions.clear();
@@ -560,9 +543,7 @@ export const state = sprae(document.body, {
   },
 
   // ── Amount & method ────────────────────────────────────
-  // Most donations are one amount by one method. That is the default: a single
-  // field plus a chip. Splitting is available but no longer occupies six
-  // always-visible inputs that all read as required.
+  // One amount by one method is the default; splitting is opt-in.
 
   visibleMethods() {
     return this.allMethodsOpen ? this.paymentMethods : this.paymentMethods.slice(0, PRIMARY_PAYMENT_COUNT);
@@ -586,7 +567,7 @@ export const state = sprae(document.body, {
     this._saveDraft();
   },
 
-  // Non-split mode: the whole typed amount belongs to exactly one method.
+  // Non-split: the whole amount belongs to one method.
   _applySingleAmount() {
     const next = {};
     for (const k of Object.keys(this.methodDollars)) next[k] = '';
@@ -597,8 +578,7 @@ export const state = sprae(document.body, {
 
   toggleSplit() {
     if (this.splitOpen) {
-      // Collapsing folds the split back into one amount on the selected method,
-      // so the total the devotee sees never silently changes.
+      // Collapse folds the split into the selected method so the total holds.
       this.totalDollars = this.collectedCents ? (this.collectedCents / 100).toFixed(2) : '';
       this.splitOpen = false;
       this._applySingleAmount();
@@ -616,8 +596,6 @@ export const state = sprae(document.body, {
   },
 
   // ── Location ───────────────────────────────────────────
-  // Chips from the devotee's own recent sessions, read from the on-device
-  // archive so they work offline. Free text stays available for a new spot.
 
   recentLocations() {
     const seen = [];
@@ -656,8 +634,7 @@ export const state = sprae(document.body, {
       return;
     }
 
-    // Books handed out with nothing collected is a real outcome and goloka
-    // accepts a session with no payment lines, so $0 submits straight through.
+    // $0 is allowed: goloka accepts a session with no payment lines.
 
     // One payment line per method with a positive amount; collected_cents is
     // derived server-side as the sum of these lines.
@@ -819,10 +796,8 @@ export const state = sprae(document.body, {
   },
 
   // ── Home stats ─────────────────────────────────────────
-  // Everything the home and leaderboard screens show is derived from two
-  // endpoints the POS already reads. Deliberately non-blocking: the landing
-  // screen renders and "Start Session" works before (or without) these
-  // resolving, because the street is exactly where the network is worst.
+  // Derived from two endpoints the POS already reads. Never awaited: the
+  // landing screen must work before these resolve, or offline.
 
   async loadHomeStats() {
     if (this.statsLoading) return;
