@@ -35,6 +35,7 @@ export const Sessions = {
         qty,
         title:           book.title,
         category:        book.category,
+        language:        book.language,
         points_per_unit: book.points_per_unit,
         cost_cents:         book.cost_cents,
         retail_price_cents: book.retail_price_cents,

@@ -617,6 +617,14 @@ body {
   color: var(--c-text);
 }
 
+.sum-lang {
+  font-size: 0.656rem;
+  font-weight: 600;
+  color: var(--c-text-dim);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 .sum-qty {
   font-size: 0.719rem;
   color: var(--c-text-dim);

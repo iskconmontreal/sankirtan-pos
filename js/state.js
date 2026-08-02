@@ -503,8 +503,11 @@ export const state = sprae(document.body, {
       .filter(e => e.qty > 0)
       .map(e => {
         const per = e.books_per_unit || 1;
+        // Drafts written before language was snapshotted fall back to the catalog.
+        const lang = e.language || Catalog.books.find(b => b.id === e.book_id)?.language || '';
         return {
           title:  e.title,
+          language: lang ? this.langLabel(lang) : '',
           // Soft and hard variants share a title, so the summary needs the same
           // disambiguation the picker rows carry.
           cover:  COVER_LABELS[String(e.category || '')[0]] ? COVER_LABELS[String(e.category)[0]].toUpperCase() : '',

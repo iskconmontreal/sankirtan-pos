@@ -333,6 +333,7 @@
             <span class="cover-pill" :if="line.cover"
                   :class="line.cover === 'HARD' ? 'cover-pill--hard' : 'cover-pill--soft'"
                   :text="line.cover"></span>
+            <span class="sum-lang" :if="line.language" :text="line.language"></span>
             <span class="sum-qty" :text="line.isStack ? line.qty + ' × stack of ' + line.per : '× ' + line.qty"></span>
             <span class="sum-books" :text="line.books"></span>
           </div>
@@ -401,7 +402,7 @@
       <div class="collection-block">
         <label class="field-label">Note <span class="optional-tag">optional</span></label>
         <textarea class="text-input note-input" rows="1"
-                  placeholder="Add a note…"
+                  placeholder="Add a note… (e.g. received 20 USD)"
                   :value="sessionNote" :oninput="onNoteInput"></textarea>
       </div>
 
@@ -543,6 +544,7 @@
         <span class="cover-pill" :if="line.cover"
               :class="line.cover === 'HARD' ? 'cover-pill--hard' : 'cover-pill--soft'"
               :text="line.cover"></span>
+        <span class="sum-lang" :if="line.language" :text="line.language"></span>
         <span class="sum-qty" :text="line.isStack ? line.qty + ' × stack of ' + line.per : '× ' + line.qty"></span>
         <span class="sum-books" :text="line.books"></span>
       </div>
