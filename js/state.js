@@ -34,6 +34,13 @@ function _toCents(v) {
   return Math.round(parseFloat(v || 0) * 100) || 0;
 }
 
+function _readJSON(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch (_) { return fallback; }
+}
+
 // ── Sprae state ────────────────────────────────────────────
 export const state = sprae(document.body, {
 
@@ -54,10 +61,13 @@ export const state = sprae(document.body, {
   authLoading: false,
   userName:    '',   // display name of the logged-in devotee
 
-  // Books / catalog
+  // Books / catalog. The language filter is remembered across sessions — most
+  // devotees stay in one language, and re-picking it every time cost a tap.
   bookGroups:       [],
   bookLanguages:    [],
-  selectedLanguage: '',
+  selectedLanguage: localStorage.getItem(CONFIG.STORAGE_KEYS.LANGUAGE) || '',
+  recentLanguages:  _readJSON(CONFIG.STORAGE_KEYS.RECENT_LANGS, []),
+  langSheetOpen:    false,
   catalogLoading:   false,
   catalogNotice:    '',
   totalBooks:     0,
@@ -310,10 +320,37 @@ export const state = sprae(document.body, {
 
   setLanguage(lang) {
     this.selectedLanguage = lang;
+    this.langSheetOpen    = false;
+    this.recentLanguages  = [lang, ...this.recentLanguages.filter(l => l !== lang)].slice(0, 6);
+    try {
+      localStorage.setItem(CONFIG.STORAGE_KEYS.LANGUAGE, lang);
+      localStorage.setItem(CONFIG.STORAGE_KEYS.RECENT_LANGS, JSON.stringify(this.recentLanguages));
+    } catch (_) {}
     this.bookGroups = Catalog.groupedBooks(lang);
     this._syncTotals();
     this._saveDraft();
   },
+
+  // The bar shows three languages and hides the rest behind "+N". Ordering is
+  // most-recently-used first so a devotee's own languages surface, and the
+  // active one is always present even when it hasn't been used lately —
+  // otherwise the bar would show a filter that isn't the one in effect.
+  primaryLanguages() {
+    const recent = this.recentLanguages.filter(l => this.bookLanguages.includes(l));
+    const top = [...recent, ...this.bookLanguages.filter(l => !recent.includes(l))].slice(0, 3);
+    if (this.selectedLanguage && !top.includes(this.selectedLanguage)) {
+      top[top.length - 1] = this.selectedLanguage;
+    }
+    return top;
+  },
+
+  overflowLanguages() {
+    const top = this.primaryLanguages();
+    return this.bookLanguages.filter(l => !top.includes(l));
+  },
+
+  openLangSheet()  { this.langSheetOpen = true; },
+  closeLangSheet() { this.langSheetOpen = false; },
 
   langLabel(lang) {
     return LANG_LABELS[String(lang).toLowerCase()] || lang;

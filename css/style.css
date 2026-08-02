@@ -310,6 +310,110 @@ body {
   margin-bottom: var(--s-md);
 }
 
+/* ── Language bar ── */
+.lang-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: var(--s-md);
+  padding-bottom: var(--s-sm);
+  border-bottom: 1px solid var(--c-border);
+}
+
+.lang-spacer { flex: 1; }
+
+.lang-pill {
+  padding: 6px 12px;
+  border: 1px solid var(--c-border);
+  border-radius: 999px;
+  background: var(--c-surface);
+  color: var(--c-text);
+  font-family: inherit;
+  font-size: 0.719rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  min-height: 32px;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
+}
+.lang-pill:hover { border-color: var(--c-accent); }
+.lang-pill--on {
+  background: var(--c-accent);
+  border-color: var(--c-accent);
+  color: var(--c-white);
+}
+
+.lang-more {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 999px;
+  background: var(--c-neutral-active);
+  color: var(--c-text-dim);
+  font-family: inherit;
+  font-size: 0.719rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  min-height: 32px;
+}
+.lang-more:hover { color: var(--c-text); }
+
+/* ── Bottom sheet ── */
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--c-overlay);
+  z-index: 300;
+}
+
+.sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 310;
+  max-width: var(--w-max);
+  margin: 0 auto;
+  background: var(--c-surface);
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+  padding: var(--s-md);
+  padding-bottom: calc(var(--s-md) + env(safe-area-inset-bottom));
+  box-shadow: var(--sh-lg);
+  animation: sheetIn 0.18s ease;
+}
+@keyframes sheetIn { from { transform: translateY(100%); } to { transform: translateY(0); } }
+
+.sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--s-md);
+}
+
+.sheet-title {
+  font-size: 0.688rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--c-text-dim);
+}
+
+.sheet-close {
+  background: none;
+  border: none;
+  font-size: var(--f-md);
+  color: var(--c-text-dim);
+  cursor: pointer;
+  padding: 4px 8px;
+  line-height: 1;
+}
+
+.sheet-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-sm);
+}
+
 /* Group header: a light rule with the size name and its point value, instead of
    a full-width solid saffron bar repeated seven times down the page. */
 .book-group { margin-bottom: var(--s-lg); }

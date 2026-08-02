@@ -147,10 +147,16 @@
 
       <div class="catalog-notice" :if="catalogNotice" :text="catalogNotice"></div>
 
-      <div class="period-selector" :if="bookLanguages.length > 1">
-        <button class="filter-btn" :each="lang in bookLanguages"
-                :class="selectedLanguage === lang ? 'active' : ''"
+      <!-- One row, never two: the three most-used languages inline, the rest
+           behind "+N". Eleven wrapped chips used to push every book below the fold. -->
+      <div class="lang-bar" :if="bookLanguages.length > 1">
+        <button class="lang-pill" :each="lang in primaryLanguages()"
+                :class="selectedLanguage === lang ? 'lang-pill--on' : ''"
                 :onclick="setLanguage(lang)" :text="langLabel(lang)"></button>
+        <span class="lang-spacer"></span>
+        <button class="lang-more" :if="overflowLanguages().length > 0"
+                :onclick="openLangSheet()"
+                :text="'+' + overflowLanguages().length + ' ▾'"></button>
       </div>
 
       <!-- Skeleton: three group headers, two rows each — keeps the layout stable
@@ -338,6 +344,20 @@
     </section>
 
   </main>
+
+  <!-- ═══════════════════ LANGUAGE SHEET ═══════════════════ -->
+  <div class="sheet-backdrop" :if="langSheetOpen" :onclick="closeLangSheet()"></div>
+  <div class="sheet" :if="langSheetOpen" role="dialog" aria-label="Choose language">
+    <div class="sheet-head">
+      <span class="sheet-title">Language</span>
+      <button class="sheet-close" :onclick="closeLangSheet()" aria-label="Close">✕</button>
+    </div>
+    <div class="sheet-grid">
+      <button class="lang-pill" :each="lang in bookLanguages"
+              :class="selectedLanguage === lang ? 'lang-pill--on' : ''"
+              :onclick="setLanguage(lang)" :text="langLabel(lang)"></button>
+    </div>
+  </div>
 
   <!-- ═══════════════════ TOAST ═══════════════════ -->
   <div class="toast" :if="toastVisible">

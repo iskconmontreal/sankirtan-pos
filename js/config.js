@@ -15,6 +15,8 @@ export const CONFIG = {
     PENDING:       'sankirtan_pending', // queued failed submissions
     RECENT:        'sankirtan_recent',  // last submitted sessions
     DRAFT:         'sankirtan_draft',   // in-progress count; cleared only on confirmed Goloka submit
+    LANGUAGE:      'sankirtan_language',      // last language filter, restored on load
+    RECENT_LANGS:  'sankirtan_recent_langs',  // recently used languages, drives the inline pills
   },
 };
 
