@@ -41,7 +41,9 @@ export const CATEGORY_LABELS = {
 export const CATEGORY_ORDER = ['S4','S3','S2','S1','H4','H3','H2','H1'];
 
 export const SIZE_LABELS  = { 1: 'Small', 2: 'Medium', 3: 'Big', 4: 'Mahabig' };
-export const SIZE_ORDER   = [1, 2, 3, 4];
+// Highest-value books first: Mahabig (2 pt) is what a devotee reaches for most,
+// so it leads the list instead of sitting below four other groups.
+export const SIZE_ORDER   = [4, 3, 2, 1];
 export const COVER_LABELS = { S: 'Soft', H: 'Hard' };
 export const COVER_ORDER  = ['S', 'H'];
 

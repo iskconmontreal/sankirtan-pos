@@ -18,8 +18,8 @@
       <div class="header-brand">
         <button class="btn-back" :if="step !== 'landing' && step !== 'login'" :onclick="goBack()">←</button>
         <div class="brand-text">
-          <h1>Sankirtan POS</h1>
-          <div class="header-subtitle">ISKCON Montréal</div>
+          <h1 :text="headerTitle()"></h1>
+          <div class="header-subtitle" :text="headerSub()"></div>
         </div>
       </div>
     </div>
@@ -145,14 +145,7 @@
     <!-- ───────────── STEP: BOOK ENTRY ───────────── -->
     <section class="step-section step-section--books" :if="step === 'books'">
 
-      <div class="step-header">
-        <h2 class="step-title">Books distributed</h2>
-        <p class="step-sub" :text="userName"></p>
-      </div>
-
       <div class="catalog-notice" :if="catalogNotice" :text="catalogNotice"></div>
-
-      <p class="empty-msg" :if="catalogLoading">Loading catalog…</p>
 
       <div class="period-selector" :if="bookLanguages.length > 1">
         <button class="filter-btn" :each="lang in bookLanguages"
@@ -160,26 +153,45 @@
                 :onclick="setLanguage(lang)" :text="langLabel(lang)"></button>
       </div>
 
+      <!-- Skeleton: three group headers, two rows each — keeps the layout stable
+           instead of collapsing to a one-line "Loading…" and jumping. -->
+      <div class="book-skeleton" :if="catalogLoading" aria-hidden="true">
+        <div :each="g in [1,2,3]" class="skel-group">
+          <div class="skel-head"></div>
+          <div :each="r in [1,2]" class="skel-row">
+            <div class="skel-line"></div>
+            <div class="skel-stepper"></div>
+          </div>
+        </div>
+      </div>
+
       <div :each="group in bookGroups" class="book-group">
         <div class="book-group-header">
           <span class="book-group-label" :text="group.label"></span>
           <span class="book-group-pts" :if="group.points != null" :text="group.points + ' pt'"></span>
+          <span class="book-group-rule"></span>
+          <span class="book-group-count" :text="group.books.length"></span>
         </div>
-        <div :each="cover in group.covers" class="book-cover-block">
-          <div class="book-cover-header" :if="cover.label" :text="cover.label + ' cover'"></div>
-          <div :each="book in cover.books" class="book-row">
-            <div class="book-info">
-              <span class="book-title" :text="book.title"></span>
-              <span class="book-price" :if="book.retail_price_cents" :text="'$' + (book.retail_price_cents / 100).toFixed(2)"></span>
-              <span class="book-stock" :text="book.is_stack ? ('contains ' + book.books_per_unit + ' books') : ('Stock: ' + book.stock)"></span>
+
+        <div :each="book in group.books"
+             :class="bookOut(book) ? 'book-row book-row--out' : 'book-row'">
+          <div class="book-info">
+            <div class="book-line">
+              <span class="book-title" :title="book.title" :text="book.title"></span>
+              <span class="cover-pill" :if="book.coverPill"
+                    :class="book.coverKey === 'H' ? 'cover-pill--hard' : 'cover-pill--soft'"
+                    :text="book.coverPill"></span>
             </div>
-            <div class="qty-controls">
-              <button class="qty-btn" :onclick="decQty(book)">−</button>
-              <input class="qty-input" type="text" inputmode="numeric" placeholder="0"
-                     :value="book.qty || ''" onfocus="this.select()"
-                     :oninput="e => setBookQty(book, e.target.value)">
-              <button class="qty-btn" :onclick="incQty(book)">+</button>
-            </div>
+            <span class="book-meta" :text="bookMeta(book)"></span>
+          </div>
+          <div class="qty-controls">
+            <button class="qty-btn qty-btn--minus" :onclick="decQty(book)"
+                    :class="book.qty > 0 ? '' : 'is-zero'" aria-label="Remove one">−</button>
+            <input class="qty-input" type="text" inputmode="numeric" placeholder="0"
+                   :class="book.qty > 0 ? '' : 'is-zero'"
+                   :value="book.qty || ''" onfocus="this.select()"
+                   :oninput="e => setBookQty(book, e.target.value)">
+            <button class="qty-btn qty-btn--plus" :onclick="incQty(book)" aria-label="Add one">+</button>
           </div>
         </div>
       </div>
@@ -187,24 +199,25 @@
       <!-- Sticky totals bar (only when at least one book is added) -->
       <div class="totals-bar" :if="totalBooks > 0">
         <div class="totals-summary">
-          <span class="totals-item" :text="totalBooks + ' books'"></span>
-          <span class="totals-sep">·</span>
-          <span class="totals-item" :text="totalPoints + ' pts'"></span>
-          <span class="totals-sep">·</span>
-          <span class="totals-item totals-item--amt" :text="'~$' + (suggestedCents / 100).toFixed(0)"></span>
+          <div class="totals-line">
+            <span class="totals-item" :text="totalBooks + (totalBooks === 1 ? ' book' : ' books')"></span>
+            <span class="totals-sep">·</span>
+            <span class="totals-item" :text="totalPoints + ' pts'"></span>
+            <span class="totals-sep">·</span>
+            <span class="totals-item totals-item--amt" :text="'~$' + (suggestedCents / 100).toFixed(0)"></span>
+          </div>
+          <!-- Truthful because _saveDraft() runs on every qty change and flips
+               storageError the moment a write actually fails. -->
+          <div class="totals-saved" :if="!storageError">Saved on this device ✓</div>
+          <div class="totals-saved totals-saved--err" :if="storageError">Not saved — keep this page open</div>
         </div>
-        <button class="btn btn-primary" :onclick="gotoCollection()">Next →</button>
+        <button class="btn btn-primary btn-next" :onclick="gotoCollection()">Next →</button>
       </div>
 
     </section>
 
     <!-- ───────────── STEP: COLLECTION ───────────── -->
     <section class="step-section" :if="step === 'collection'">
-
-      <div class="step-header">
-        <h2 class="step-title">Collection</h2>
-        <p class="step-sub" :text="userName + ' · ' + totalBooks + ' books · ' + totalPoints + ' pts'"></p>
-      </div>
 
       <div class="payment-block">
         <label class="field-label">How it was collected</label>
@@ -279,10 +292,6 @@
 
     <!-- ───────────── STEP: LEADERBOARD ───────────── -->
     <section class="step-section" :if="step === 'leaderboard'">
-
-      <div class="step-header">
-        <h2 class="step-title">Leaderboard</h2>
-      </div>
 
       <div class="period-selector">
         <button class="filter-btn" :class="leaderboardPeriod === 'month' ? 'active' : ''"

@@ -16,6 +16,29 @@ const _rows = (books) => books
   .sort((a, b) => a.title.localeCompare(b.title))
   .map(b => ({ ...b, qty: 0 }));
 
+// Cover blocks → one flat, title-sorted row list for a group.
+//
+// The picker used to nest a "Soft cover" / "Hard cover" sub-header above each
+// block, which put the only thing distinguishing two identical titles far away
+// from the rows themselves. Instead every row carries its own cover pill, and
+// the two variants of a title sit next to each other where the difference is
+// readable at a glance. The pill is dropped entirely when a group has just one
+// cover — there is nothing to disambiguate.
+const _flatRows = (blocks) => {
+  const filled = blocks.filter(b => b.books.length > 0);
+  const showPill = filled.length > 1;
+  return filled
+    .flatMap(({ coverKey, label, books }) => books.map(b => ({
+      ...b,
+      qty: 0,
+      coverKey,
+      coverPill: showPill && label ? label.toUpperCase() : '',
+    })))
+    .sort((a, b) =>
+      a.title.localeCompare(b.title) ||
+      COVER_ORDER.indexOf(a.coverKey) - COVER_ORDER.indexOf(b.coverKey));
+};
+
 export const Catalog = {
   books: [],
 
@@ -125,43 +148,36 @@ export const Catalog = {
 
     const groups = SIZE_ORDER
       .filter(size => bySize[size])
-      .map(size => {
-        const pts = CATEGORY_POINTS['S' + size] ?? 0;
-        return {
-          sizeKey: size,
-          label:   SIZE_LABELS[size],
-          points:  pts,
-          covers: COVER_ORDER
-            .filter(c => bySize[size][c]?.length > 0)
-            .map(c => ({ coverKey: c, label: COVER_LABELS[c], books: _rows(bySize[size][c]) })),
-        };
-      });
+      .map(size => ({
+        sizeKey: size,
+        label:   SIZE_LABELS[size],
+        points:  CATEGORY_POINTS['S' + size] ?? 0,
+        books:   _flatRows(COVER_ORDER.map(c => ({
+          coverKey: c, label: COVER_LABELS[c], books: _rows(bySize[size][c] || []),
+        }))),
+      }));
 
-    // Sets (boxed multi-volume titles) — one block, no cover sublabel. Matched on
+    // Sets (boxed multi-volume titles) — one block, no cover pill. Matched on
     // the book's own language like any other row, so the French Srimad-Bhagavatam
     // Set only shows under French.
     if (sets.length) {
-      groups.push({
-        sizeKey: 'sets', label: 'Sets', points: null,
-        covers: [{ coverKey: 'set', label: '', books: _rows(sets) }],
-      });
+      groups.push({ sizeKey: 'sets', label: 'Sets', points: null, books: _rows(sets) });
     }
 
     // Everything else the BBT doesn't score: excluded titles, and books still
     // waiting on a page count (S0/H0). Distributed all the same.
-    const otherCovers = [...COVER_ORDER, '?']
-      .filter(c => other[c]?.length > 0)
-      .map(c => ({ coverKey: c, label: COVER_LABELS[c] || '', books: _rows(other[c]) }));
-    if (otherCovers.length) {
-      groups.push({ sizeKey: 'other', label: 'Other titles — not scored', points: null, covers: otherCovers });
+    const otherBooks = _flatRows([...COVER_ORDER, '?'].map(c => ({
+      coverKey: c, label: COVER_LABELS[c] || '', books: _rows(other[c] || []),
+    })));
+    if (otherBooks.length) {
+      groups.push({ sizeKey: 'other', label: 'Other titles — not scored', points: null, books: otherBooks });
     }
 
-    // Stacks ride the same group shape (one synthetic cover, no sublabel) so the
-    // picker, totals, and qty controls work unchanged. Shown under each language
-    // a component belongs to.
+    // Stacks ride the same group shape so the picker, totals, and qty controls
+    // work unchanged. Shown under each language a component belongs to.
     const stacks = Catalog.stacks(language);
     if (stacks.length) {
-      groups.push({ sizeKey: 'stack', label: 'Stacks', points: null, covers: [{ coverKey: 'stack', label: '', books: stacks }] });
+      groups.push({ sizeKey: 'stack', label: 'Stacks', points: null, books: stacks });
     }
     return groups;
   },

@@ -116,6 +116,20 @@ export const state = sprae(document.body, {
     this.goto(backMap[this.step] || 'landing');
   },
 
+  // The screen title lives in the header bar rather than repeating as an H2
+  // inside the scroll area, which cost ~60px above the fold on every screen.
+
+  headerTitle() {
+    return { books: 'Books distributed', collection: 'Collection', leaderboard: 'Leaderboard' }[this.step]
+      || 'Sankirtan POS';
+  },
+
+  headerSub() {
+    if (this.step === 'books')      return this.userName;
+    if (this.step === 'collection') return `${this.userName} · ${this.totalBooks} ${this.totalBooks === 1 ? 'book' : 'books'} · ${this.totalPoints} pts`;
+    return 'ISKCON Montréal';
+  },
+
   // ── Landing ────────────────────────────────────────────
 
   async startSession() {
@@ -130,10 +144,7 @@ export const state = sprae(document.body, {
       // Reset qtys for a fresh session
       this.bookGroups = this.bookGroups.map(group => ({
         ...group,
-        covers: group.covers.map(cover => ({
-          ...cover,
-          books: cover.books.map(b => ({ ...b, qty: 0 })),
-        })),
+        books: group.books.map(b => ({ ...b, qty: 0 })),
       }));
     }
     this._syncTotals();
@@ -184,10 +195,7 @@ export const state = sprae(document.body, {
     // Re-hydrate bookGroups with updated qtys so Sprae re-renders
     this.bookGroups = this.bookGroups.map(group => ({
       ...group,
-      covers: group.covers.map(cover => ({
-        ...cover,
-        books: cover.books.map(b => ({ ...b, qty: Sessions.getQty(b.id) })),
-      })),
+      books: group.books.map(b => ({ ...b, qty: Sessions.getQty(b.id) })),
     }));
   },
 
@@ -309,6 +317,32 @@ export const state = sprae(document.body, {
 
   langLabel(lang) {
     return LANG_LABELS[String(lang).toLowerCase()] || lang;
+  },
+
+  // ── Book row display ───────────────────────────────────
+  // One meta line per row: price, then availability. Titles with no price show
+  // availability alone — a missing price is a catalog gap, not a reason to hide
+  // a book that is being handed out.
+
+  bookMeta(book) {
+    const parts = [];
+    if (book.retail_price_cents) parts.push('$' + (book.retail_price_cents / 100).toFixed(0));
+    if (book.is_stack) {
+      parts.push(book.books_per_unit + ' books');
+    } else if (typeof book.stock === 'number') {
+      if (book.stock <= 0)      parts.push('out of stock');
+      else if (book.stock <= 3) parts.push('last ' + book.stock);
+      else                      parts.push(String(book.stock));
+    }
+    return parts.join(' · ');
+  },
+
+  // Dim a row whose recorded stock is exhausted. The "+" stays live on purpose:
+  // stock records drift, and a devotee who actually handed the book out must
+  // still be able to record it — an inaccurate stock count is recoverable, a
+  // lost count is not. Over-stock still raises the existing warning toast.
+  bookOut(book) {
+    return !book.is_stack && typeof book.stock === 'number' && book.stock <= 0;
   },
 
   // ── Collection ─────────────────────────────────────────

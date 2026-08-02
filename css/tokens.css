@@ -73,5 +73,13 @@
   --c-sankirtan-strong: #b04d1a;
   --c-sankirtan-dark:   #8a3912;
 
+  /* Derived neutrals — hairline separates rows *inside* a card while the card
+     edge keeps --c-border; the accent-on-dark tint is the only accent legible
+     on the dark temple cards. */
+  --c-hairline:        #f2efeb;
+  --c-accent-on-dark:  #f0a875;
+  --c-disabled:        #c9c4bd;
+  --c-disabled-strong: #d8d3cd;
+
   --transition: 0.18s ease;
 }
