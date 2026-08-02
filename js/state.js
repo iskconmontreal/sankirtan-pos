@@ -4,7 +4,7 @@
 */
 
 import sprae from './vendor/sprae.js';
-import { CONFIG, LANG_LABELS, COVER_LABELS, PAYMENT_METHODS } from './config.js';
+import { CONFIG, LANG_LABELS, COVER_LABELS, PAYMENT_METHODS, PRIMARY_PAYMENT_COUNT } from './config.js';
 import { Catalog } from './catalog.js';
 import { Sessions } from './sessions.js';
 import { DB } from './db.js';
@@ -74,12 +74,19 @@ export const state = sprae(document.body, {
   totalPoints:    0,
   suggestedCents: 0,
 
-  // Collection — each method is keyed independently; the total is their sum.
+  // Collection. methodDollars stays the single source of truth for the payload:
+  // the simple (non-split) UI is a veneer that writes the one typed amount into
+  // the selected method, so submitSession's payload building is unchanged.
   paymentMethods: PAYMENT_METHODS,
   methodDollars:  { Cash: '', Card: '', Cheque: '', Interac: '', 'Bank Transfer': '', Other: '' },
   collectedCents: 0,
+  totalDollars:     '',
+  selectedMethod:   'Cash',
+  splitOpen:        false,
+  allMethodsOpen:   false,
   sessionLocation:  '',
   sessionNote:      '',
+  locationOpen:     false,
   submitting:       false,
 
   summaryOpen:      false,
@@ -245,6 +252,9 @@ export const state = sprae(document.body, {
       sessionLocation:  this.sessionLocation,
       sessionNote:      this.sessionNote,
       methodDollars:    this.methodDollars,
+      totalDollars:     this.totalDollars,
+      selectedMethod:   this.selectedMethod,
+      splitOpen:        this.splitOpen,
       entries:          Sessions.entries,
       idempotencyKey:   Sessions.getIdempotencyKey(),
       saved_at:         new Date().toISOString(),
@@ -300,6 +310,13 @@ export const state = sprae(document.body, {
     this.sessionNote     = draft.sessionNote     || '';
     if (draft.methodDollars)    this.methodDollars    = draft.methodDollars;
     if (draft.selectedLanguage) this.selectedLanguage = draft.selectedLanguage;
+    if (draft.selectedMethod)   this.selectedMethod   = draft.selectedMethod;
+    this.totalDollars = draft.totalDollars || '';
+    // Fall back to inferring the split view from the amounts themselves, so a
+    // draft written before these fields existed still restores coherently.
+    const funded = Object.values(draft.methodDollars || {}).filter(v => _toCents(v) > 0).length;
+    this.splitOpen      = draft.splitOpen ?? funded > 1;
+    this.allMethodsOpen = this.splitOpen;
 
     // Rebuild the book list for the saved language and overlay the saved qtys
     this.bookGroups = Catalog.groupedBooks(this.selectedLanguage);
@@ -475,6 +492,84 @@ export const state = sprae(document.body, {
     this.collectedCents = total;
   },
 
+  // ── Amount & method ────────────────────────────────────
+  // Most donations are one amount by one method. That is the default: a single
+  // field plus a chip. Splitting is available but no longer occupies six
+  // always-visible inputs that all read as required.
+
+  visibleMethods() {
+    return this.allMethodsOpen ? this.paymentMethods : this.paymentMethods.slice(0, PRIMARY_PAYMENT_COUNT);
+  },
+
+  hiddenMethodCount() {
+    return this.allMethodsOpen ? 0 : this.paymentMethods.length - PRIMARY_PAYMENT_COUNT;
+  },
+
+  showAllMethods() { this.allMethodsOpen = true; },
+
+  onTotalInput(e) {
+    this.totalDollars = e.target.value;
+    this._applySingleAmount();
+    this._saveDraft();
+  },
+
+  selectMethod(method) {
+    this.selectedMethod = method;
+    if (!this.splitOpen) this._applySingleAmount();
+    this._saveDraft();
+  },
+
+  // Non-split mode: the whole typed amount belongs to exactly one method.
+  _applySingleAmount() {
+    const next = {};
+    for (const k of Object.keys(this.methodDollars)) next[k] = '';
+    next[this.selectedMethod] = this.totalDollars;
+    this.methodDollars = next;
+    this._syncCollected();
+  },
+
+  toggleSplit() {
+    if (this.splitOpen) {
+      // Collapsing folds the split back into one amount on the selected method,
+      // so the total the devotee sees never silently changes.
+      this.totalDollars = this.collectedCents ? (this.collectedCents / 100).toFixed(2) : '';
+      this.splitOpen = false;
+      this._applySingleAmount();
+    } else {
+      this.splitOpen = true;
+      this.allMethodsOpen = true;
+    }
+    this._saveDraft();
+  },
+
+  onMethodInput(e, method) {
+    this.methodDollars[method] = e.target.value;
+    this._syncCollected();
+    this._saveDraft();
+  },
+
+  // ── Location ───────────────────────────────────────────
+  // Chips from the devotee's own recent sessions, read from the on-device
+  // archive so they work offline. Free text stays available for a new spot.
+
+  recentLocations() {
+    const seen = [];
+    for (const entry of Sessions.getRecent()) {
+      const loc = ((entry.payload && entry.payload.location) || '').trim();
+      if (loc && !seen.includes(loc)) seen.push(loc);
+      if (seen.length >= 4) break;
+    }
+    return seen;
+  },
+
+  setLocation(loc) {
+    this.sessionLocation = this.sessionLocation === loc ? '' : loc;
+    this.locationOpen = false;
+    this._saveDraft();
+  },
+
+  openLocationInput() { this.locationOpen = true; },
+
   // ── Submission ─────────────────────────────────────────
 
   async submitSession() {
@@ -489,8 +584,16 @@ export const state = sprae(document.body, {
 
     this._syncCollected();
 
-    if (this.collectedCents <= 0) {
-      this._showToast('Enter the amount collected before submitting.');
+    if (this.totalBooks === 0) {
+      this._showToast('Count at least one book before submitting.');
+      return;
+    }
+
+    // Books handed out with nothing collected is a real outcome, and goloka
+    // accepts a session with no payment lines. Confirm rather than block —
+    // blocking left the devotee with no way to record the distribution.
+    if (this.collectedCents <= 0 &&
+        !confirm(`Distributed ${this.totalBooks} book(s) with no donation collected?`)) {
       return;
     }
 
@@ -573,6 +676,10 @@ export const state = sprae(document.body, {
     this.sessionNote      = '';
     this.methodDollars    = { Cash: '', Card: '', Cheque: '', Interac: '', 'Bank Transfer': '', Other: '' };
     this.collectedCents   = 0;
+    this.totalDollars     = '';
+    this.splitOpen        = false;
+    this.allMethodsOpen   = false;
+    this.locationOpen     = false;
     this.confirmResult    = null;
     this.confirmCountdown = 0;
     this.goto('landing');

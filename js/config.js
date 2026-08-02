@@ -59,11 +59,17 @@ export const LANG_ORDER = ['English', 'French', 'Spanish', 'Arabic', 'Bengali', 
 // Payment methods offered at the POS. A session's donation can be split across
 // several methods; the collector keys each one independently and the total is the
 // sum of them. goloka books one finance income row per method.
+// Labels carry no emoji: they rendered as inconsistent platform glyphs and added
+// nothing. `value` is what goloka stores — never change it without matching the
+// CHECK on sankirtan_session_payments.method.
 export const PAYMENT_METHODS = [
-  { value: 'Cash',          label: '💵 Cash' },
-  { value: 'Card',          label: '💳 Card' },
-  { value: 'Cheque',        label: '🧾 Cheque' },
-  { value: 'Interac',       label: '📲 Interac' },
-  { value: 'Bank Transfer', label: '🏦 Bank Transfer' },
-  { value: 'Other',         label: '🪙 Other' },
+  { value: 'Cash',          label: 'Cash' },
+  { value: 'Card',          label: 'Card' },
+  { value: 'Interac',       label: 'Interac' },
+  { value: 'Cheque',        label: 'Cheque' },
+  { value: 'Bank Transfer', label: 'Bank Transfer' },
+  { value: 'Other',         label: 'Other' },
 ];
+
+// The four that fit one row on a phone; the rest appear when "+" is tapped.
+export const PRIMARY_PAYMENT_COUNT = 4;

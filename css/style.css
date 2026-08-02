@@ -784,6 +784,117 @@ body {
   margin-bottom: var(--s-lg);
 }
 
+/* ── Total card ── */
+.total-card {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: 20px;
+  padding: 22px var(--s-md);
+  margin-bottom: var(--s-lg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.total-card-label {
+  font-size: 0.688rem;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--c-text-dim);
+}
+
+.total-card-field {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 2px;
+  width: 100%;
+}
+
+.total-card-currency {
+  font-size: var(--f-2xl);
+  font-weight: 700;
+  color: var(--c-disabled);
+  line-height: 1;
+}
+
+.total-card-input {
+  width: 100%;
+  max-width: 8ch;
+  border: none;
+  background: none;
+  font-family: inherit;
+  font-size: 2.875rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--c-text);
+  text-align: left;
+  padding: 0;
+}
+.total-card-input:focus { outline: none; }
+.total-card-input::placeholder { color: var(--c-disabled); }
+
+.total-card-amount {
+  font-size: 2.875rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--c-text);
+}
+
+.total-card-hint {
+  font-size: 0.719rem;
+  color: var(--c-text-dim);
+}
+
+/* ── Chips (payment method, location) ── */
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: var(--s-sm);
+}
+
+.chip {
+  padding: 10px 13px;
+  border: 1px solid var(--c-border);
+  border-radius: 12px;
+  background: var(--c-surface);
+  color: var(--c-text);
+  font-family: inherit;
+  font-size: 0.781rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  min-height: 40px;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
+}
+.chip:hover { border-color: var(--c-accent); }
+.chip--on {
+  background: var(--c-accent);
+  border-color: var(--c-accent);
+  color: var(--c-white);
+}
+.chip--dark {
+  background: var(--c-text);
+  border-color: var(--c-text);
+  color: var(--c-white);
+}
+.chip--more { color: var(--c-text-dim); }
+
+.link-btn--sm { font-size: 0.75rem; color: var(--c-sankirtan-strong); }
+
+.split-rows { margin-top: var(--s-sm); }
+
+.note-input {
+  min-height: var(--h-input);
+  resize: vertical;
+  line-height: 1.5;
+  transition: min-height var(--transition), border-color var(--transition);
+}
+.note-input:focus { min-height: 84px; }
+
 .field-label {
   display: block;
   font-size: 0.72rem;

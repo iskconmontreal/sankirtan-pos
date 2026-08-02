@@ -249,45 +249,70 @@
         </div>
       </div>
 
-      <div class="payment-block">
-        <label class="field-label">How it was collected</label>
+      <!-- One amount, one method — the shape of almost every donation. -->
+      <div class="total-card">
+        <span class="total-card-label">Total collected</span>
+        <div class="total-card-amount" :if="splitOpen" :text="'$' + (collectedCents/100).toFixed(2)"></div>
+        <div class="total-card-field" :if="!splitOpen">
+          <span class="total-card-currency">$</span>
+          <input class="total-card-input" type="text" inputmode="decimal" placeholder="0.00"
+                 onfocus="this.select()"
+                 :value="totalDollars" :oninput="onTotalInput">
+        </div>
+        <span class="total-card-hint" :if="suggestedCents > 0"
+              :text="'suggested $' + (suggestedCents/100).toFixed(0) + ' for ' + totalBooks + (totalBooks === 1 ? ' book' : ' books')"></span>
+      </div>
 
-        <div class="method-row" :each="pm in paymentMethods">
-          <span class="method-label" :text="pm.label"></span>
-          <div class="actual-input-wrapper method-input-wrap">
-            <span class="currency-prefix">$</span>
-            <input class="actual-input" type="text"
-                   inputmode="decimal" placeholder="0.00"
-                   onfocus="this.select()"
-                   :value="methodDollars[pm.value]"
-                   :oninput="e => { methodDollars[pm.value] = e.target.value; _syncCollected(); _saveDraft() }">
+      <div class="collection-block">
+        <label class="field-label">How it was collected</label>
+        <div class="chip-row">
+          <button class="chip" :each="pm in visibleMethods()"
+                  :class="!splitOpen && selectedMethod === pm.value ? 'chip--on' : ''"
+                  :onclick="selectMethod(pm.value)" :text="pm.label"></button>
+          <button class="chip chip--more" :if="hiddenMethodCount() > 0"
+                  :onclick="showAllMethods()" :text="'＋' + hiddenMethodCount()"></button>
+        </div>
+        <button class="link-btn link-btn--sm" :onclick="toggleSplit()"
+                :text="splitOpen ? '− Use a single method' : '＋ Split across methods'"></button>
+
+        <!-- Split: the original per-method rows, shown only when asked for. -->
+        <div class="split-rows" :if="splitOpen">
+          <div class="method-row" :each="pm in paymentMethods">
+            <span class="method-label" :text="pm.label"></span>
+            <div class="actual-input-wrapper method-input-wrap">
+              <span class="currency-prefix">$</span>
+              <input class="actual-input" type="text"
+                     inputmode="decimal" placeholder="0.00"
+                     onfocus="this.select()"
+                     :value="methodDollars[pm.value]"
+                     :oninput="e => onMethodInput(e, pm.value)">
+            </div>
           </div>
         </div>
       </div>
 
-      <div class="total-block">
-        <div class="total-row">
-          <span class="field-label">Total collected</span>
-          <span class="total-amount" :text="'$' + (collectedCents/100).toFixed(2)"></span>
+      <div class="collection-block">
+        <label class="field-label">Where <span class="optional-tag">optional</span></label>
+        <div class="chip-row" :if="recentLocations().length > 0 && !locationOpen">
+          <button class="chip" :each="loc in recentLocations()"
+                  :class="sessionLocation === loc ? 'chip--dark' : ''"
+                  :onclick="setLocation(loc)" :text="loc"></button>
+          <button class="chip chip--more" :onclick="openLocationInput()">＋ New</button>
         </div>
-      </div>
-
-      <div class="optional-block">
-        <label class="field-label">Where did you distribute today?
-          <span class="optional-tag">optional</span></label>
         <input class="text-input" type="text" placeholder="e.g. Ste-Catherine St."
+               :if="locationOpen || recentLocations().length === 0"
                :value="sessionLocation" :oninput="onLocationInput">
       </div>
 
-      <div class="optional-block">
+      <div class="collection-block">
         <label class="field-label">Note <span class="optional-tag">optional</span></label>
-        <textarea class="text-input textarea-input" rows="3"
-                  placeholder="Any notes…"
+        <textarea class="text-input note-input" rows="1"
+                  placeholder="Add a note…"
                   :value="sessionNote" :oninput="onNoteInput"></textarea>
       </div>
 
       <button class="btn btn-primary btn-submit" :onclick="submitSession()"
-              :disabled="collectedCents <= 0"
+              :disabled="submitting || totalBooks === 0"
               :text="submitting ? 'Submitting…' : 'Submit Session'"></button>
 
     </section>
