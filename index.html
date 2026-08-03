@@ -471,9 +471,8 @@
 
       <div class="lb-loading" :if="leaderboardLoading">Loading…</div>
 
-      <p class="empty-msg" :if="!leaderboardLoading && leaderboardRows.length === 0">
-        No data for this period yet.
-      </p>
+      <p class="empty-msg" :if="!leaderboardLoading && leaderboardRows.length === 0"
+         :text="'No sessions in ' + periodLabel(leaderboardPeriod) + '.'"></p>
 
       <div :if="!leaderboardLoading && leaderboardRows.length > 0">
 

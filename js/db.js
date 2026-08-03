@@ -164,10 +164,11 @@ export const DB = {
 
   // GET /api/sankirtan/sessions?distributor=&from= — newest first. Used for the
   // home screen's "last out" line and the distribution streak.
-  async getSessions({ distributor, from } = {}) {
+  async getSessions({ distributor, from, to } = {}) {
     const params = new URLSearchParams();
     if (distributor) params.set('distributor', distributor);
     if (from)        params.set('from', from);
+    if (to)          params.set('to', to);
     const resp = await _request(`/api/sankirtan/sessions?${params}`, { cache: 'no-store' });
     return resp.json();
   },
