@@ -182,6 +182,7 @@ export const state = sprae(document.body, {
 
   summaryOpen:      false,
   clearConfirm:     false,
+  bbtInfoOpen:      false,
 
   // Confirmation
   confirmResult:    null,
@@ -1012,6 +1013,9 @@ export const state = sprae(document.body, {
   },
 
   revealAllLeaders() { this.showAllLeaders = true; },
+
+  openBbtInfo()  { this.bbtInfoOpen = true; },
+  closeBbtInfo() { this.bbtInfoOpen = false; },
 
   leaderboardBooks() {
     return this.leaderboardRows.reduce((s, r) => s + (r.books || 0), 0);

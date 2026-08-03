@@ -1450,10 +1450,63 @@ body {
 .leader-more:hover { border-color: var(--c-accent); color: var(--c-accent); }
 
 .lb-legend {
-  font-size: 0.688rem;
-  color: var(--c-text-dim);
+  display: block;
+  width: 100%;
   margin-top: var(--s-md);
+  padding: var(--s-sm);
+  border: none;
+  background: none;
+  font-family: inherit;
+  font-size: 0.719rem;
+  font-weight: 600;
+  color: var(--c-sankirtan-strong);
   text-align: center;
+  cursor: pointer;
+}
+
+/* The BBT number itself opens the explainer — the question gets asked while
+   looking at the value, not at a legend below the fold. */
+.bbt-tap { cursor: pointer; }
+.bbt-tap:hover { color: var(--c-accent); }
+
+/* ── Explainer sheet ── */
+.info-lead {
+  font-size: 0.844rem;
+  line-height: 1.45;
+  color: var(--c-text);
+  margin-bottom: var(--s-md);
+}
+
+.info-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 0;
+  border-top: 1px solid var(--c-hairline);
+  font-size: 0.781rem;
+  line-height: 1.4;
+  color: var(--c-text);
+}
+
+.info-badge {
+  flex-shrink: 0;
+  min-width: 3.5rem;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--c-neutral-active);
+  color: var(--c-text-dim);
+  font-size: 0.688rem;
+  font-weight: 700;
+  text-align: center;
+}
+.info-badge--good { background: var(--c-ok-active); color: #2d7a55; }
+.info-badge--high { background: var(--c-warn-bg);   color: var(--c-warn-text); }
+
+.info-note {
+  margin-top: var(--s-md);
+  font-size: 0.688rem;
+  line-height: 1.45;
+  color: var(--c-text-dim);
 }
 
 .lb-loading {

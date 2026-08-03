@@ -507,7 +507,8 @@
             </span>
             <span class="leader-stat leader-stat--money">
               <b :text="'$' + (row.collected_cents / 100).toFixed(0)"></b>
-              <i :text="row.bbt_pct == null ? 'BBT —' : 'BBT ' + Math.round(row.bbt_pct) + '%'"></i>
+              <i class="bbt-tap" :onclick="openBbtInfo()"
+                 :text="(row.bbt_pct == null ? 'BBT —' : 'BBT ' + Math.round(row.bbt_pct) + '%') + ' ⓘ'"></i>
             </span>
           </div>
 
@@ -515,7 +516,7 @@
                   :text="'Show all ' + leaderboardRows.length + ' · sort by pts, $, BBT %'"></button>
         </div>
 
-        <p class="lb-legend">BBT % is temple cost ÷ donation — lower means more stays with the temple.</p>
+        <button class="lb-legend" :onclick="openBbtInfo()">ⓘ What is BBT %?</button>
       </div>
 
       <div class="lb-table-wrap" :if="!leaderboardLoading && showAllLeaders && leaderboardRows.length > 0">
@@ -548,6 +549,29 @@
     </section>
 
   </main>
+
+  <!-- ═══════════════════ BBT % EXPLAINER ═══════════════════ -->
+  <div class="sheet-backdrop" :if="bbtInfoOpen" :onclick="closeBbtInfo()"></div>
+  <div class="sheet" :if="bbtInfoOpen" role="dialog" aria-label="What is BBT percent">
+    <div class="sheet-head">
+      <span class="sheet-title">What is BBT %?</span>
+      <button class="sheet-close" :onclick="closeBbtInfo()" aria-label="Close">✕</button>
+    </div>
+    <p class="info-lead">How much of the donation went to covering what the books cost the temple.</p>
+    <div class="info-row">
+      <span class="info-badge info-badge--good">Low %</span>
+      <span>Most of the donation stays with the temple. This is what we want.</span>
+    </div>
+    <div class="info-row">
+      <span class="info-badge info-badge--high">High %</span>
+      <span>The donation mostly just covered the cost of the books.</span>
+    </div>
+    <div class="info-row">
+      <span class="info-badge">—</span>
+      <span>No donation was recorded for those books.</span>
+    </div>
+    <p class="info-note">It is not a score of your seva — a devotee giving books to someone who cannot pay will show a high %.</p>
+  </div>
 
   <!-- ═══════════════════ SESSION SUMMARY SHEET ═══════════════════ -->
   <div class="sheet-backdrop" :if="summaryOpen" :onclick="closeSummary()"></div>
