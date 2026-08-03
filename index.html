@@ -13,28 +13,30 @@
 <body>
 
   <!-- ═══════════════════ HEADER ═══════════════════ -->
-  <header id="app-header">
+  <header id="app-header" :if="step !== 'login'">
     <div class="header-inner">
       <div class="header-brand">
         <button class="btn-back" :if="step !== 'landing' && step !== 'login'" :onclick="goBack()">←</button>
         <div class="brand-text">
-          <h1>Sankirtan POS</h1>
-          <div class="header-subtitle">ISKCON Montréal</div>
+          <h1 :text="headerTitle()"></h1>
+          <div class="header-subtitle" :text="headerSub()"></div>
         </div>
       </div>
+      <div class="header-avatar" :if="step === 'landing'" :text="userInitials()"></div>
     </div>
   </header>
 
   <!-- offline notice -->
   <div class="offline-banner" :if="isOffline">Offline — submission queued locally</div>
 
-  <!-- storage failure notice — the in-progress count could not be saved to the device -->
-  <div class="offline-banner" style="background:#c0392b;color:#fff" :if="storageError">
-    ⚠ Count not saved to this device — keep this page open and submit as soon as possible
+  <!-- storage failure notice — fires ONLY when localStorage actually threw, so the
+       in-progress count really is at risk. Reassurance lives in the books footer. -->
+  <div class="offline-banner offline-banner--alert" :if="storageError">
+    ⚠ Could not save to this device — keep this page open and submit as soon as you can
   </div>
 
   <!-- archive notice — the device copy of submitted sessions was pruned or failed -->
-  <div class="offline-banner" style="background:#c0392b;color:#fff" :if="archiveWarning" :text="archiveWarning"></div>
+  <div class="offline-banner offline-banner--alert" :if="archiveWarning" :text="archiveWarning"></div>
 
   <!-- ═══════════════════ MAIN ═══════════════════ -->
   <main id="app-main">
@@ -42,13 +44,37 @@
     <!-- ───────────── STEP: LOGIN ───────────── -->
     <section class="step-section" :if="step === 'login'">
 
-      <div class="login-card">
-        <h2 class="step-title">Sign in</h2>
-        <p class="login-hint">Use your ISKCON Montréal (Goloka) account.</p>
+      <!-- Full-height on a phone: the old floating card wasted the viewport. -->
+      <div class="login-brand">
+        <div class="login-brand-top">
+          <span class="login-brand-org">ISKCON Montréal</span>
+        </div>
+        <h1 class="login-wordmark">Sankirtan</h1>
+        <p class="login-sub">Book distribution, counted and offered.</p>
+      </div>
+
+      <div class="login-auth">
 
         <div class="catalog-notice" :if="authError" :text="authError"></div>
 
-        <form :if="authStep === 'email'" :onsubmit.prevent="authSubmitEmail()">
+        <!-- Google first: it is the path almost every devotee actually uses.
+             The button, authGoogle(), and the redirect handling are unchanged —
+             only the position moved. -->
+        <div :if="authStep === 'email' && !emailFormOpen">
+          <button class="btn btn-outline-dark btn-block btn-google" :onclick="authGoogle()" aria-label="Sign in with Google">
+            <svg viewBox="0 0 24 24" width="20" height="20">
+              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4" />
+              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
+              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+            </svg>
+            Google
+          </button>
+          <div class="login-rule"></div>
+          <button class="link-btn login-email-link" :onclick="openEmailForm()">Sign in with email instead</button>
+        </div>
+
+        <form :if="authStep === 'email' && emailFormOpen" :onsubmit.prevent="authSubmitEmail()">
           <label class="field-label">Email</label>
           <input class="text-input" type="email" autocomplete="email" required
                  placeholder="you@example.com"
@@ -56,6 +82,7 @@
           <button class="btn btn-primary btn-block" type="submit"
                   :disabled="authLoading"
                   :text="authLoading ? 'Checking…' : 'Continue'"></button>
+          <button class="link-btn" type="button" :onclick="closeEmailForm()">← Back</button>
         </form>
 
         <form :if="authStep === 'password'" :onsubmit.prevent="authSubmitPassword()">
@@ -65,7 +92,7 @@
           <button class="btn btn-primary btn-block" type="submit"
                   :disabled="authLoading"
                   :text="authLoading ? 'Signing in…' : 'Sign In'"></button>
-          <button class="link-btn" type="button" :onclick="_showLogin()">← Different email</button>
+          <button class="link-btn" type="button" :onclick="restartEmail()">← Different email</button>
         </form>
 
         <form :if="authStep === 'otp'" :onsubmit.prevent="authVerifyOtp()">
@@ -77,25 +104,17 @@
           <button class="btn btn-primary btn-block" type="submit"
                   :disabled="authLoading"
                   :text="authLoading ? 'Verifying…' : 'Verify'"></button>
-          <button class="link-btn" type="button" :onclick="_showLogin()">← Start over</button>
+          <button class="link-btn" type="button" :onclick="restartEmail()">← Start over</button>
         </form>
 
-        <div :if="authStep === 'email'">
-          <div class="login-divider">or continue with</div>
-          <button class="btn btn-outline-dark btn-block btn-google" :onclick="authGoogle()" aria-label="Sign in with Google">
-            <svg viewBox="0 0 24 24" width="20" height="20">
-              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4" />
-              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
-              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
-            </svg>
-            Google
-          </button>
-        </div>
-
-        <p class="login-hint" style="margin-top:var(--s-md);">
-          No account? Ask the temple admin to add you in Mandir (Users → Book Distributor role).
+        <p class="login-help">
+          No account? Ask the temple admin to add you as a Book Distributor.
         </p>
+
+        <div class="login-offline">
+          <span class="login-offline-dot"></span>
+          Works offline once signed in
+        </div>
       </div>
 
     </section>
@@ -103,40 +122,76 @@
     <!-- ───────────── STEP: LANDING ───────────── -->
     <section class="step-section" :if="step === 'landing'">
 
-      <div class="landing-hero">
-        <div class="landing-date" :text="todayLabel"></div>
-        <h2 class="landing-title">Hare Krishna!</h2>
-        <p class="landing-tagline" :text="'Welcome, ' + userName"></p>
-        <button class="btn btn-primary btn-hero" :onclick="startSession()">
-          Start Session
-        </button>
-      </div>
+      <div class="home">
 
-      <div class="pending-banner" :if="pendingCount > 0">
-        <div class="pending-text">
-          <strong :text="pendingCount + ' session(s) pending'"></strong>
-          <span :if="!pendingError">Could not reach Goloka</span>
-          <span class="pending-error" :if="pendingError" :text="pendingError"></span>
+        <div class="home-greeting">
+          <h2 class="home-hello" :text="'Hare Krishna, ' + userName"></h2>
+          <p class="home-last" :if="lastSessionLabel"
+             :text="'Last out ' + lastSessionLabel + ' — ' + lastSessionBooks + (lastSessionBooks === 1 ? ' book' : ' books')"></p>
+          <p class="home-last" :if="!lastSessionLabel" :text="todayLabel"></p>
         </div>
-        <button class="btn btn-sm btn-outline-dark" :onclick="retryPending()">Retry now</button>
-        <button class="btn btn-sm btn-outline-dark" :onclick="discardPending()">Discard</button>
-      </div>
 
-      <div class="landing-links">
-        <button class="link-btn" :onclick="gotoLeaderboard()">Leaderboard →</button>
-        <button class="link-btn link-btn--dim" :onclick="logout()"
-                :text="'Sign out (' + userName + ')'"></button>
-      </div>
+        <button class="btn btn-start" :onclick="startSession()">Start Session</button>
 
-      <!-- Data safety: every submitted session is kept on this device; re-push is
-           duplicate-safe (Goloka recognizes sessions it already has by their keys). -->
-      <div style="margin-top:var(--s-md); text-align:center; font-size:var(--f-xs);">
-        <span class="link-btn--dim" style="opacity:.7"
-              :text="archiveCount + ' session(s) kept on this device'"></span>
-        <button class="link-btn link-btn--dim" :onclick="repushAll()"
-                :disabled="repushing"
-                :text="repushing ? 'Re-sending…' : 'Re-send all to Goloka'"></button>
-        <div :if="repushStatus" style="margin-top:var(--s-xs); opacity:.85" :text="repushStatus"></div>
+        <!-- Own standing. Zeroes until the two GETs land, or offline. -->
+        <div class="stat-row">
+          <div class="stat-tile">
+            <div class="stat-tile-value" :text="myBooksYear"></div>
+            <div class="stat-tile-label">books this year</div>
+          </div>
+          <div class="stat-tile">
+            <div class="stat-tile-value" :text="myPointsYear"></div>
+            <div class="stat-tile-label">points</div>
+          </div>
+          <div class="stat-tile">
+            <div class="stat-tile-value" :text="myRank > 0 ? '#' + myRank : '—'"></div>
+            <div class="stat-tile-label">this year</div>
+          </div>
+        </div>
+
+        <div class="temple-card" :if="templeBooksMonth > 0">
+          <div class="temple-card-top">
+            <span class="temple-card-kicker" :text="periodLabel('month').toUpperCase() + ' · TEMPLE'"></span>
+            <span class="temple-card-streak" :if="streakDays > 1" :text="streakDays + '-day streak'"></span>
+          </div>
+          <div class="temple-card-value" :text="templeBooksMonth.toLocaleString()"></div>
+          <div class="temple-card-caption"
+               :text="'books · ' + templeDevoteesMonth + (templeDevoteesMonth === 1 ? ' devotee' : ' devotees') + ' out this month'"></div>
+        </div>
+
+        <!-- Sync status. Replaces the ambiguous "N session(s) kept on this device
+             Re-send all to Goloka" run-on, which read as a warning when it was not. -->
+        <div class="sync-card" :if="pendingCount === 0">
+          <span class="sync-badge">✓</span>
+          <div class="sync-text">
+            <strong :text="archiveCount === 0 ? 'Nothing to sync yet' : 'All ' + archiveCount + (archiveCount === 1 ? ' session' : ' sessions') + ' synced to Goloka'"></strong>
+            <span>A copy stays on this device</span>
+          </div>
+          <button class="link-btn link-btn--dim link-btn--sm" :onclick="repushAll()"
+                  :disabled="repushing"
+                  :text="repushing ? 'Re-sending…' : 'Re-send'"></button>
+        </div>
+
+        <div class="sync-card sync-card--warn" :if="pendingCount > 0">
+          <span class="sync-badge sync-badge--warn">!</span>
+          <div class="sync-text">
+            <strong :text="pendingCount + (pendingCount === 1 ? ' session' : ' sessions') + ' waiting to reach Goloka'"></strong>
+            <span :if="!pendingError">Kept safe on this device — will retry automatically</span>
+            <span class="pending-error" :if="pendingError" :text="pendingError"></span>
+          </div>
+        </div>
+        <div class="sync-actions" :if="pendingCount > 0">
+          <button class="btn btn-sm btn-outline-dark" :onclick="retryPending()">Retry now</button>
+          <button class="btn btn-sm btn-outline-dark" :onclick="discardPending()">Discard</button>
+        </div>
+
+        <div :if="repushStatus" class="home-note" :text="repushStatus"></div>
+
+        <div class="home-nav">
+          <button class="btn-nav" :onclick="gotoLeaderboard()">Leaderboard</button>
+          <button class="btn-nav" :onclick="logout()">Sign out</button>
+        </div>
+
       </div>
 
     </section>
@@ -144,55 +199,125 @@
     <!-- ───────────── STEP: BOOK ENTRY ───────────── -->
     <section class="step-section step-section--books" :if="step === 'books'">
 
-      <div class="step-header">
-        <h2 class="step-title">Books distributed</h2>
-        <p class="step-sub" :text="userName"></p>
-      </div>
-
       <div class="catalog-notice" :if="catalogNotice" :text="catalogNotice"></div>
 
-      <p class="empty-msg" :if="catalogLoading">Loading catalog…</p>
-
-      <div class="period-selector" :if="bookLanguages.length > 1">
-        <button class="filter-btn" :each="lang in bookLanguages"
-                :class="selectedLanguage === lang ? 'active' : ''"
-                :onclick="setLanguage(lang)" :text="langLabel(lang)"></button>
+      <div class="search-bar">
+        <span class="search-icon" aria-hidden="true">⌕</span>
+        <input class="search-input" type="search" inputmode="search"
+               placeholder="Search all languages…"
+               :value="searchQuery" :oninput="onSearchInput">
+        <button class="search-clear" :if="searchQuery" :onclick="clearSearch()" aria-label="Clear search">✕</button>
       </div>
 
-      <div :each="group in bookGroups" class="book-group">
-        <div class="book-group-header">
-          <span class="book-group-label" :text="group.label"></span>
-          <span class="book-group-pts" :if="group.points != null" :text="group.points + ' pt'"></span>
+      <!-- One row, never two: anchor languages inline, the rest behind "+N". -->
+      <div class="lang-bar" :if="!searchQuery">
+        <button class="lang-pill" :each="lang in primaryLanguages()"
+                :class="selectedLanguage === lang ? 'lang-pill--on' : ''"
+                :onclick="setLanguage(lang)" :text="langLabel(lang)"></button>
+        <button class="lang-more" :if="overflowLanguages().length > 0"
+                :onclick="openLangSheet()"
+                :text="'+' + overflowLanguages().length + ' ▾'"></button>
+        <span class="lang-spacer"></span>
+        <button class="size-toggle" :onclick="toggleSizeOrder()"
+                :text="sizeOrder === 'desc' ? 'Big first ⇅' : 'Small first ⇅'"></button>
+      </div>
+
+      <!-- Search results: flat, every language, filter ignored. -->
+      <div :if="searchQuery">
+        <p class="empty-msg" :if="searchResults.length === 0">
+          No title matches “<span :text="searchQuery"></span>”.
+        </p>
+        <div :each="book in searchResults"
+             :class="bookOut(book) ? 'book-row book-row--out' : 'book-row'">
+          <div class="book-info">
+            <div class="book-line">
+              <span class="book-title" :title="book.title" :text="book.title"></span>
+              <span class="cover-pill" :if="book.coverPill"
+                    :class="book.coverKey === 'H' ? 'cover-pill--hard' : 'cover-pill--soft'"
+                    :text="book.coverPill"></span>
+            </div>
+            <span class="book-meta">
+              <span class="book-lang" :text="langLabel(book.language)"></span>
+              <span :text="bookMeta(book) ? ' · ' + bookMeta(book) : ''"></span>
+            </span>
+          </div>
+          <div class="qty-controls">
+            <button class="qty-btn qty-btn--minus" :onclick="decQty(book)"
+                    :class="book.qty > 0 ? '' : 'is-zero'" aria-label="Remove one">−</button>
+            <input class="qty-input" type="text" inputmode="numeric" placeholder="0"
+                   :class="book.qty > 0 ? '' : 'is-zero'"
+                   :value="book.qty || ''" onfocus="this.select()"
+                   :oninput="e => setBookQty(book, e.target.value)">
+            <button class="qty-btn qty-btn--plus" :onclick="incQty(book)" aria-label="Add one">+</button>
+          </div>
         </div>
-        <div :each="cover in group.covers" class="book-cover-block">
-          <div class="book-cover-header" :if="cover.label" :text="cover.label + ' cover'"></div>
-          <div :each="book in cover.books" class="book-row">
+      </div>
+
+      <!-- Skeleton: three group headers, two rows each — keeps the layout stable
+           instead of collapsing to a one-line "Loading…" and jumping. -->
+      <div class="book-skeleton" :if="catalogLoading && !searchQuery" aria-hidden="true">
+        <div :each="g in [1,2,3]" class="skel-group">
+          <div class="skel-head"></div>
+          <div :each="r in [1,2]" class="skel-row">
+            <div class="skel-line"></div>
+            <div class="skel-stepper"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- :if and :each must not share an element: :if detaches the node while
+           :each inserts clones relative to it, so the list renders into nothing. -->
+      <div :if="!searchQuery">
+        <div :each="group in bookGroups" class="book-group">
+          <div class="book-group-header">
+            <span class="book-group-label" :text="group.label"></span>
+            <span class="book-group-pts" :if="group.points != null" :text="group.points + ' pt'"></span>
+            <span class="book-group-rule"></span>
+            <span class="book-group-count" :text="group.books.length"></span>
+          </div>
+
+          <div :each="book in group.books"
+               :class="bookOut(book) ? 'book-row book-row--out' : 'book-row'">
             <div class="book-info">
-              <span class="book-title" :text="book.title"></span>
-              <span class="book-price" :if="book.retail_price_cents" :text="'$' + (book.retail_price_cents / 100).toFixed(2)"></span>
-              <span class="book-stock" :text="book.is_stack ? ('contains ' + book.books_per_unit + ' books') : ('Stock: ' + book.stock)"></span>
+              <div class="book-line">
+                <span class="book-title" :title="book.title" :text="book.title"></span>
+                <span class="cover-pill" :if="book.coverPill"
+                      :class="book.coverKey === 'H' ? 'cover-pill--hard' : 'cover-pill--soft'"
+                      :text="book.coverPill"></span>
+              </div>
+              <span class="book-meta" :text="bookMeta(book)"></span>
             </div>
             <div class="qty-controls">
-              <button class="qty-btn" :onclick="decQty(book)">−</button>
+              <button class="qty-btn qty-btn--minus" :onclick="decQty(book)"
+                      :class="book.qty > 0 ? '' : 'is-zero'" aria-label="Remove one">−</button>
               <input class="qty-input" type="text" inputmode="numeric" placeholder="0"
+                     :class="book.qty > 0 ? '' : 'is-zero'"
                      :value="book.qty || ''" onfocus="this.select()"
                      :oninput="e => setBookQty(book, e.target.value)">
-              <button class="qty-btn" :onclick="incQty(book)">+</button>
+              <button class="qty-btn qty-btn--plus" :onclick="incQty(book)" aria-label="Add one">+</button>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Sticky totals bar (only when at least one book is added) -->
+      <!-- Sticky totals bar (only when at least one book is added). Tapping the
+           totals opens the line-by-line summary — the fastest way to see why a
+           total is what it is (stacks) and to clear a wrong count. -->
       <div class="totals-bar" :if="totalBooks > 0">
-        <div class="totals-summary">
-          <span class="totals-item" :text="totalBooks + ' books'"></span>
-          <span class="totals-sep">·</span>
-          <span class="totals-item" :text="totalPoints + ' pts'"></span>
-          <span class="totals-sep">·</span>
-          <span class="totals-item totals-item--amt" :text="'~$' + (suggestedCents / 100).toFixed(0)"></span>
-        </div>
-        <button class="btn btn-primary" :onclick="gotoCollection()">Next →</button>
+        <button class="totals-summary" :onclick="openSummary()" aria-label="Show session summary">
+          <div class="totals-line">
+            <span class="totals-item" :text="totalBooks + (totalBooks === 1 ? ' book' : ' books')"></span>
+            <span class="totals-sep">·</span>
+            <span class="totals-item" :text="totalPoints + ' pts'"></span>
+            <span class="totals-sep">·</span>
+            <span class="totals-item totals-item--amt" :text="'~$' + (suggestedCents / 100).toFixed(0)"></span>
+          </div>
+          <!-- Truthful because _saveDraft() runs on every qty change and flips
+               storageError the moment a write actually fails. -->
+          <div class="totals-saved" :if="!storageError">Saved on this device ✓ · tap to review</div>
+          <div class="totals-saved totals-saved--err" :if="storageError">Not saved — keep this page open</div>
+        </button>
+        <button class="btn btn-primary btn-next" :onclick="gotoCollection()">Next →</button>
       </div>
 
     </section>
@@ -200,50 +325,99 @@
     <!-- ───────────── STEP: COLLECTION ───────────── -->
     <section class="step-section" :if="step === 'collection'">
 
-      <div class="step-header">
-        <h2 class="step-title">Collection</h2>
-        <p class="step-sub" :text="userName + ' · ' + totalBooks + ' books · ' + totalPoints + ' pts'"></p>
+      <!-- Exactly what will be registered in Goloka, before any money is keyed. -->
+      <div class="summary-card">
+        <div class="summary-head">
+          <span class="sheet-title">This session</span>
+          <button class="link-btn link-btn--danger" :if="!clearConfirm"
+                  :onclick="askClearCount()">Clear count</button>
+          <div class="confirm-row" :if="clearConfirm">
+            <span class="confirm-text" :text="'Clear all ' + totalBooks + '?'"></span>
+            <button class="btn btn-sm btn-outline-dark" :onclick="cancelClearCount()">No</button>
+            <button class="btn btn-sm btn-danger" :onclick="clearCount()">Yes, clear</button>
+          </div>
+        </div>
+        <div class="sum-list">
+          <div class="sum-row" :each="line in sessionLines()">
+            <span class="sum-title" :title="line.title" :text="line.title"></span>
+            <span class="cover-pill" :if="line.cover"
+                  :class="line.cover === 'HARD' ? 'cover-pill--hard' : 'cover-pill--soft'"
+                  :text="line.cover"></span>
+            <span class="sum-lang" :if="line.language" :text="line.language"></span>
+            <span class="sum-qty" :text="line.isStack ? line.qty + ' × stack of ' + line.per : '× ' + line.qty"></span>
+            <span class="sum-books" :text="line.books"></span>
+          </div>
+        </div>
+        <div class="sum-foot">
+          <span :text="totalBooks + (totalBooks === 1 ? ' book' : ' books')"></span>
+          <span class="sum-foot-pts" :text="totalPoints + ' pts'"></span>
+        </div>
       </div>
 
-      <div class="payment-block">
-        <label class="field-label">How it was collected</label>
+      <!-- One amount, one method — the shape of almost every donation. -->
+      <div class="total-card">
+        <span class="total-card-label">Total collected</span>
+        <div class="total-card-amount" :if="splitOpen" :text="'$' + (collectedCents/100).toFixed(2)"></div>
+        <div class="total-card-field" :if="!splitOpen">
+          <span class="total-card-currency">$</span>
+          <input class="total-card-input" type="text" inputmode="decimal" placeholder="0.00"
+                 onfocus="this.select()"
+                 :value="totalDollars" :oninput="onTotalInput">
+        </div>
+        <span class="total-card-hint" :if="suggestedCents > 0"
+              :text="'suggested $' + (suggestedCents/100).toFixed(0) + ' for ' + totalBooks + (totalBooks === 1 ? ' book' : ' books')"></span>
+      </div>
 
-        <div class="method-row" :each="pm in paymentMethods">
-          <span class="method-label" :text="pm.label"></span>
-          <div class="actual-input-wrapper method-input-wrap">
-            <span class="currency-prefix">$</span>
-            <input class="actual-input" type="text"
-                   inputmode="decimal" placeholder="0.00"
-                   onfocus="this.select()"
-                   :value="methodDollars[pm.value]"
-                   :oninput="e => { methodDollars[pm.value] = e.target.value; _syncCollected(); _saveDraft() }">
+      <div class="collection-block">
+        <label class="field-label">How it was collected</label>
+        <div class="chip-row">
+          <button class="chip" :each="pm in visibleMethods()"
+                  :class="!splitOpen && selectedMethod === pm.value ? 'chip--on' : ''"
+                  :onclick="selectMethod(pm.value)" :text="pm.label"></button>
+          <button class="chip chip--more" :if="hiddenMethodCount() > 0"
+                  :onclick="showAllMethods()" :text="'＋' + hiddenMethodCount()"></button>
+        </div>
+        <button class="link-btn link-btn--sm" :onclick="toggleSplit()"
+                :text="splitOpen ? '− Use a single method' : '＋ Split across methods'"></button>
+
+        <!-- Split: the original per-method rows, shown only when asked for. -->
+        <div class="split-rows" :if="splitOpen">
+          <div class="method-row" :each="pm in paymentMethods">
+            <span class="method-label" :text="pm.label"></span>
+            <div class="actual-input-wrapper method-input-wrap">
+              <span class="currency-prefix">$</span>
+              <input class="actual-input" type="text"
+                     inputmode="decimal" placeholder="0.00"
+                     onfocus="this.select()"
+                     :value="methodDollars[pm.value]"
+                     :oninput="e => onMethodInput(e, pm.value)">
+            </div>
           </div>
         </div>
       </div>
 
-      <div class="total-block">
-        <div class="total-row">
-          <span class="field-label">Total collected</span>
-          <span class="total-amount" :text="'$' + (collectedCents/100).toFixed(2)"></span>
+      <div class="collection-block">
+        <label class="field-label">Where <span class="optional-tag">optional</span></label>
+        <div class="chip-row" :if="recentLocations().length > 0 && !locationOpen">
+          <button class="chip" :each="loc in recentLocations()"
+                  :class="sessionLocation === loc ? 'chip--dark' : ''"
+                  :onclick="setLocation(loc)" :text="loc"></button>
+          <button class="chip chip--more" :onclick="openLocationInput()">＋ New</button>
         </div>
-      </div>
-
-      <div class="optional-block">
-        <label class="field-label">Where did you distribute today?
-          <span class="optional-tag">optional</span></label>
         <input class="text-input" type="text" placeholder="e.g. Ste-Catherine St."
+               :if="locationOpen || recentLocations().length === 0"
                :value="sessionLocation" :oninput="onLocationInput">
       </div>
 
-      <div class="optional-block">
+      <div class="collection-block">
         <label class="field-label">Note <span class="optional-tag">optional</span></label>
-        <textarea class="text-input textarea-input" rows="3"
-                  placeholder="Any notes…"
+        <textarea class="text-input note-input" rows="1"
+                  placeholder="Add a note… (e.g. received 20 USD)"
                   :value="sessionNote" :oninput="onNoteInput"></textarea>
       </div>
 
       <button class="btn btn-primary btn-submit" :onclick="submitSession()"
-              :disabled="collectedCents <= 0"
+              :disabled="submitting || totalBooks === 0"
               :text="submitting ? 'Submitting…' : 'Submit Session'"></button>
 
     </section>
@@ -279,17 +453,20 @@
     <!-- ───────────── STEP: LEADERBOARD ───────────── -->
     <section class="step-section" :if="step === 'leaderboard'">
 
-      <div class="step-header">
-        <h2 class="step-title">Leaderboard</h2>
-      </div>
-
-      <div class="period-selector">
-        <button class="filter-btn" :class="leaderboardPeriod === 'month' ? 'active' : ''"
-                :onclick="setPeriod('month')">This Month</button>
-        <button class="filter-btn" :class="leaderboardPeriod === 'year' ? 'active' : ''"
-                :onclick="setPeriod('year')">This Year</button>
-        <button class="filter-btn" :class="leaderboardPeriod === 'all' ? 'active' : ''"
-                :onclick="setPeriod('all')">All Time</button>
+      <!-- Segmented control; the month segment steps through past months. -->
+      <div class="segmented">
+        <div class="segment segment--month"
+             :class="leaderboardPeriod === 'month' ? 'segment--on' : ''">
+          <button class="month-step" :if="leaderboardPeriod === 'month'"
+                  :onclick="stepMonth(1)" aria-label="Previous month">‹</button>
+          <button class="month-label" :onclick="setPeriod('month')" :text="periodLabel('month')"></button>
+          <button class="month-step" :if="leaderboardPeriod === 'month'"
+                  :onclick="stepMonth(-1)" :disabled="monthOffset === 0"
+                  aria-label="Next month">›</button>
+        </div>
+        <button class="segment" :each="p in ['year', 'all']"
+                :class="leaderboardPeriod === p ? 'segment--on' : ''"
+                :onclick="setPeriod(p)" :text="periodLabel(p)"></button>
       </div>
 
       <div class="lb-loading" :if="leaderboardLoading">Loading…</div>
@@ -298,7 +475,51 @@
         No data for this period yet.
       </p>
 
-      <div class="lb-table-wrap" :if="!leaderboardLoading && leaderboardRows.length > 0">
+      <div :if="!leaderboardLoading && leaderboardRows.length > 0">
+
+        <div class="temple-card">
+          <span class="temple-card-kicker" :text="'TEMPLE TOTAL · ' + periodLabel(leaderboardPeriod).toUpperCase()"></span>
+          <div class="temple-card-value" :text="leaderboardBooks().toLocaleString()"></div>
+          <div class="temple-card-caption"
+               :text="'books · ' + leaderboardRows.length + (leaderboardRows.length === 1 ? ' devotee' : ' devotees')"></div>
+        </div>
+
+        <!-- Your own row, pinned regardless of where it sorts. -->
+        <div class="rank-card" :if="myLeaderRow()">
+          <div class="rank-tile" :text="'#' + myLeaderRow().rank"></div>
+          <div class="rank-body">
+            <div class="rank-name" :text="'You — ' + myLeaderRow().distributor_name"></div>
+            <div class="rank-meta"
+                 :text="myLeaderRow().books + ' books · ' + myLeaderRow().points + ' pts · $' + (myLeaderRow().collected_cents / 100).toFixed(0)"></div>
+          </div>
+          <div class="rank-aside">
+            <div class="rank-streak" :if="streakDays > 1" :text="streakDays + '-day streak'"></div>
+            <div class="rank-gap" :if="leaderGap()" :text="leaderGap()"></div>
+          </div>
+        </div>
+
+        <div class="leader-list">
+          <div class="leader-card" :each="row in topLeaders()"
+               :class="row.distributor_name === userName ? 'leader-card--me' : ''">
+            <span class="leader-rank" :text="row.rank"></span>
+            <span class="leader-name" :text="row.distributor_name"></span>
+            <span class="leader-stat">
+              <b :text="row.books"></b><i>books</i>
+            </span>
+            <span class="leader-stat leader-stat--money">
+              <b :text="'$' + (row.collected_cents / 100).toFixed(0)"></b>
+              <i :text="row.bbt_pct == null ? 'BBT —' : 'BBT ' + Math.round(row.bbt_pct) + '%'"></i>
+            </span>
+          </div>
+
+          <button class="leader-more" :if="hiddenLeaderCount() > 0" :onclick="revealAllLeaders()"
+                  :text="'Show all ' + leaderboardRows.length + ' · sort by pts, $, BBT %'"></button>
+        </div>
+
+        <p class="lb-legend">BBT % is temple cost ÷ donation — lower means more stays with the temple.</p>
+      </div>
+
+      <div class="lb-table-wrap" :if="!leaderboardLoading && showAllLeaders && leaderboardRows.length > 0">
         <table class="lb-table">
           <thead>
             <tr>
@@ -328,6 +549,51 @@
     </section>
 
   </main>
+
+  <!-- ═══════════════════ SESSION SUMMARY SHEET ═══════════════════ -->
+  <div class="sheet-backdrop" :if="summaryOpen" :onclick="closeSummary()"></div>
+  <div class="sheet" :if="summaryOpen" role="dialog" aria-label="Session summary">
+    <div class="sheet-head">
+      <span class="sheet-title">This session</span>
+      <button class="sheet-close" :onclick="closeSummary()" aria-label="Close">✕</button>
+    </div>
+    <div class="sum-list">
+      <div class="sum-row" :each="line in sessionLines()">
+        <span class="sum-title" :title="line.title" :text="line.title"></span>
+        <span class="cover-pill" :if="line.cover"
+              :class="line.cover === 'HARD' ? 'cover-pill--hard' : 'cover-pill--soft'"
+              :text="line.cover"></span>
+        <span class="sum-lang" :if="line.language" :text="line.language"></span>
+        <span class="sum-qty" :text="line.isStack ? line.qty + ' × stack of ' + line.per : '× ' + line.qty"></span>
+        <span class="sum-books" :text="line.books"></span>
+      </div>
+    </div>
+    <div class="sum-foot">
+      <span :text="totalBooks + (totalBooks === 1 ? ' book' : ' books')"></span>
+      <span class="sum-foot-pts" :text="totalPoints + ' pts'"></span>
+    </div>
+    <button class="btn btn-danger-outline btn-block sum-clear" :if="!clearConfirm"
+            :onclick="askClearCount()">Clear count</button>
+    <div class="confirm-row confirm-row--block" :if="clearConfirm">
+      <span class="confirm-text" :text="'Clear all ' + totalBooks + ' book(s)?'"></span>
+      <button class="btn btn-sm btn-outline-dark" :onclick="cancelClearCount()">No</button>
+      <button class="btn btn-sm btn-danger" :onclick="clearCount()">Yes, clear</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ LANGUAGE SHEET ═══════════════════ -->
+  <div class="sheet-backdrop" :if="langSheetOpen" :onclick="closeLangSheet()"></div>
+  <div class="sheet" :if="langSheetOpen" role="dialog" aria-label="Choose language">
+    <div class="sheet-head">
+      <span class="sheet-title">Language</span>
+      <button class="sheet-close" :onclick="closeLangSheet()" aria-label="Close">✕</button>
+    </div>
+    <div class="sheet-grid">
+      <button class="lang-pill" :each="lang in bookLanguages"
+              :class="selectedLanguage === lang ? 'lang-pill--on' : ''"
+              :onclick="setLanguage(lang)" :text="langLabel(lang)"></button>
+    </div>
+  </div>
 
   <!-- ═══════════════════ TOAST ═══════════════════ -->
   <div class="toast" :if="toastVisible">

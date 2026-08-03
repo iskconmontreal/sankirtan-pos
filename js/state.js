@@ -4,7 +4,7 @@
 */
 
 import sprae from './vendor/sprae.js';
-import { CONFIG, LANG_LABELS, PAYMENT_METHODS } from './config.js';
+import { CONFIG, LANG_LABELS, COVER_LABELS, PAYMENT_METHODS, PRIMARY_PAYMENT_COUNT, ANCHOR_LANGUAGES } from './config.js';
 import { Catalog } from './catalog.js';
 import { Sessions } from './sessions.js';
 import { DB } from './db.js';
@@ -34,6 +34,101 @@ function _toCents(v) {
   return Math.round(parseFloat(v || 0) * 100) || 0;
 }
 
+// Local calendar day for a date-ish value, as YYYY-MM-DD. occurred_at is stored
+// day-resolution (…T00:00:00Z), so compare on the date part rather than parsing
+// to a local Date, which would shift the day west of UTC.
+function _dayKey(value) {
+  return String(value).slice(0, 10);
+}
+
+// YYYY-MM-DD from a Date's *local* parts. toISOString() would shift the day for
+// any timezone east of UTC, silently breaking the streak there.
+function _localDayKey(d) {
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+
+function _daysAgoISO(n) {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return d.toISOString().slice(0, 10);
+}
+
+// "today" / "yesterday" / "3 days ago" / a date once it stops being relatable.
+function _relativeDay(occurredAt) {
+  const then = _dayKey(occurredAt);
+  const days = Math.round((Date.parse(_todayISO()) - Date.parse(then)) / 86400000);
+  if (!Number.isFinite(days)) return '';
+  if (days <= 0) return 'today';
+  if (days === 1) return 'yesterday';
+  if (days < 7)  return `${days} days ago`;
+  return new Date(then + 'T00:00:00').toLocaleDateString('en-CA', { month: 'short', day: 'numeric' });
+}
+
+// Consecutive calendar days with at least one session, counting back from today
+// (or from yesterday — a devotee who has not been out yet today has not broken
+// the streak until the day ends).
+function _streakDays(dates) {
+  const days = new Set(dates.map(_dayKey));
+  if (days.size === 0) return 0;
+  const cursor = new Date(_todayISO() + 'T00:00:00');   // local midnight today
+  if (!days.has(_localDayKey(cursor))) cursor.setDate(cursor.getDate() - 1);
+  let streak = 0;
+  while (days.has(_localDayKey(cursor))) {
+    streak++;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  return streak;
+}
+
+// Calendar month `offset` months back. `to` is the FIRST day of the next month:
+// goloka compares occurred_at (RFC3339) to the raw string, so "2026-08-31" would
+// sort before "2026-08-31T00:00:00Z" and drop the last day's sessions.
+function _monthRange(offset) {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth() - offset, 1);
+  const next  = new Date(start.getFullYear(), start.getMonth() + 1, 1);
+  const sameYear = start.getFullYear() === now.getFullYear();
+  return {
+    from:  _localDayKey(start),
+    to:    _localDayKey(next),
+    label: start.toLocaleDateString('en-CA',
+      sameYear ? { month: 'long' } : { month: 'long', year: 'numeric' }),
+  };
+}
+
+// Sessions → leaderboard rows, matching the shape of GET /leaderboard so the
+// cards, sorting and table work identically for a past month.
+function _aggregateSessions(sessions) {
+  const by = new Map();
+  for (const s of sessions) {
+    const name = s.distributor_name || '—';
+    const row = by.get(name) || {
+      distributor_name: name, books: 0, points: 0,
+      collected_cents: 0, cost_cents: 0, session_count: 0, bbt_pct: null,
+    };
+    row.books           += s.total_books || 0;
+    row.points          += s.total_points || 0;
+    row.collected_cents += s.collected_cents || 0;
+    row.cost_cents      += s.total_cost_cents || 0;
+    row.session_count   += 1;
+    by.set(name, row);
+  }
+  return [...by.values()].map(r => ({
+    ...r,
+    points:  Math.round(r.points * 100) / 100,
+    bbt_pct: r.collected_cents > 0 ? (r.cost_cents / r.collected_cents) * 100 : null,
+  }));
+}
+
+function _readJSON(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch (_) { return fallback; }
+}
+
 // ── Sprae state ────────────────────────────────────────────
 export const state = sprae(document.body, {
 
@@ -52,25 +147,41 @@ export const state = sprae(document.body, {
   authOtp:     '',
   authError:   '',
   authLoading: false,
+  emailFormOpen: false,   // the email form is behind a link; Google leads
   userName:    '',   // display name of the logged-in devotee
 
-  // Books / catalog
+  // Books / catalog. The language filter is remembered across sessions — most
+  // devotees stay in one language, and re-picking it every time cost a tap.
   bookGroups:       [],
   bookLanguages:    [],
-  selectedLanguage: '',
+  selectedLanguage: localStorage.getItem(CONFIG.STORAGE_KEYS.LANGUAGE) || '',
+  sizeOrder:        localStorage.getItem(CONFIG.STORAGE_KEYS.SIZE_ORDER) === 'asc' ? 'asc' : 'desc',
+  langSheetOpen:    false,
+  searchQuery:      '',
+  searchResults:    [],
   catalogLoading:   false,
   catalogNotice:    '',
   totalBooks:     0,
   totalPoints:    0,
   suggestedCents: 0,
 
-  // Collection — each method is keyed independently; the total is their sum.
+  // Collection. methodDollars stays the single source of truth for the payload:
+  // the simple (non-split) UI is a veneer that writes the one typed amount into
+  // the selected method, so submitSession's payload building is unchanged.
   paymentMethods: PAYMENT_METHODS,
   methodDollars:  { Cash: '', Card: '', Cheque: '', Interac: '', 'Bank Transfer': '', Other: '' },
   collectedCents: 0,
+  totalDollars:     '',
+  selectedMethod:   'Cash',
+  splitOpen:        false,
+  allMethodsOpen:   false,
   sessionLocation:  '',
   sessionNote:      '',
+  locationOpen:     false,
   submitting:       false,
+
+  summaryOpen:      false,
+  clearConfirm:     false,
 
   // Confirmation
   confirmResult:    null,
@@ -83,7 +194,21 @@ export const state = sprae(document.body, {
   leaderboardLoading:  false,
   leaderboardSortBy:   'points',
   leaderboardSortDir:  'desc',
+  monthOffset:         0,   // 0 = current month, 1 = last month, …
   lastDevotee:         '',
+
+  // Home stats, all derived from the leaderboard + own sessions.
+  statsLoading:        false,
+  myBooksYear:         0,
+  myPointsYear:        0,
+  myRank:              0,
+  streakDays:          0,
+  lastSessionLabel:    '',
+  lastSessionBooks:    0,
+  templeBooksMonth:    0,
+  templeLocations:     [],
+  templeDevoteesMonth: 0,
+  showAllLeaders:      false,
 
   archiveCount:  0,     // sessions stored on this device (submitted archive)
   repushing:     false,
@@ -116,11 +241,28 @@ export const state = sprae(document.body, {
     this.goto(backMap[this.step] || 'landing');
   },
 
+  headerTitle() {
+    return { books: 'Books distributed', collection: 'Collection', leaderboard: 'Leaderboard' }[this.step]
+      || 'Sankirtan POS';
+  },
+
+  headerSub() {
+    if (this.step === 'books')      return this.userName;
+    if (this.step === 'collection') return `${this.userName} · ${this.totalBooks} ${this.totalBooks === 1 ? 'book' : 'books'} · ${this.totalPoints} pts`;
+    return 'ISKCON Montréal';
+  },
+
   // ── Landing ────────────────────────────────────────────
 
   async startSession() {
+    const discarded = Sessions.getTotalBooks();
+
+    // Clear the draft too — otherwise a reload before the first tap (iOS evicts
+    // backgrounded tabs on screen-lock) resurrects the previous count.
     Sessions.clear();
+    this._clearDraft();
     this.sessionLocation = '';
+    this.sessionNote     = '';
     this.goto('books');
 
     // Refresh book groups (reload if bookGroups is empty)
@@ -130,13 +272,14 @@ export const state = sprae(document.body, {
       // Reset qtys for a fresh session
       this.bookGroups = this.bookGroups.map(group => ({
         ...group,
-        covers: group.covers.map(cover => ({
-          ...cover,
-          books: cover.books.map(b => ({ ...b, qty: 0 })),
-        })),
+        books: group.books.map(b => ({ ...b, qty: 0 })),
       }));
     }
     this._syncTotals();
+
+    if (discarded > 0) {
+      this._showToast(`Started fresh — previous count of ${discarded} book(s) discarded.`);
+    }
   },
 
   // ── Books ──────────────────────────────────────────────
@@ -184,11 +327,9 @@ export const state = sprae(document.body, {
     // Re-hydrate bookGroups with updated qtys so Sprae re-renders
     this.bookGroups = this.bookGroups.map(group => ({
       ...group,
-      covers: group.covers.map(cover => ({
-        ...cover,
-        books: cover.books.map(b => ({ ...b, qty: Sessions.getQty(b.id) })),
-      })),
+      books: group.books.map(b => ({ ...b, qty: Sessions.getQty(b.id) })),
     }));
+    if (this.searchQuery) this._runSearch();
   },
 
   // Totals-only refresh for the numeric qty input: updates the scalar totals
@@ -213,6 +354,9 @@ export const state = sprae(document.body, {
       sessionLocation:  this.sessionLocation,
       sessionNote:      this.sessionNote,
       methodDollars:    this.methodDollars,
+      totalDollars:     this.totalDollars,
+      selectedMethod:   this.selectedMethod,
+      splitOpen:        this.splitOpen,
       entries:          Sessions.entries,
       idempotencyKey:   Sessions.getIdempotencyKey(),
       saved_at:         new Date().toISOString(),
@@ -268,9 +412,16 @@ export const state = sprae(document.body, {
     this.sessionNote     = draft.sessionNote     || '';
     if (draft.methodDollars)    this.methodDollars    = draft.methodDollars;
     if (draft.selectedLanguage) this.selectedLanguage = draft.selectedLanguage;
+    if (draft.selectedMethod)   this.selectedMethod   = draft.selectedMethod;
+    this.totalDollars = draft.totalDollars || '';
+    // Fall back to inferring the split view from the amounts themselves, so a
+    // draft written before these fields existed still restores coherently.
+    const funded = Object.values(draft.methodDollars || {}).filter(v => _toCents(v) > 0).length;
+    this.splitOpen      = draft.splitOpen ?? funded > 1;
+    this.allMethodsOpen = this.splitOpen;
 
     // Rebuild the book list for the saved language and overlay the saved qtys
-    this.bookGroups = Catalog.groupedBooks(this.selectedLanguage);
+    this._rebuildGroups();
     this._syncTotals();
     this._syncCollected();
 
@@ -297,18 +448,143 @@ export const state = sprae(document.body, {
     if (!this.selectedLanguage || !this.bookLanguages.includes(this.selectedLanguage)) {
       this.selectedLanguage = this.bookLanguages[0] || '';
     }
-    this.bookGroups = Catalog.groupedBooks(this.selectedLanguage);
+    this._rebuildGroups();
+  },
+
+  _rebuildGroups() {
+    this.bookGroups = Catalog.groupedBooks(this.selectedLanguage, this.sizeOrder);
+    if (this.searchQuery) this._runSearch();
+  },
+
+  onSearchInput(e) {
+    this.searchQuery = e.target.value;
+    this._runSearch();
+  },
+
+  clearSearch() {
+    this.searchQuery   = '';
+    this.searchResults = [];
+  },
+
+  _runSearch() {
+    this.searchResults = Catalog.search(this.searchQuery)
+      .map(b => ({ ...b, qty: Sessions.getQty(b.id) }));
+  },
+
+  toggleSizeOrder() {
+    this.sizeOrder = this.sizeOrder === 'desc' ? 'asc' : 'desc';
+    try { localStorage.setItem(CONFIG.STORAGE_KEYS.SIZE_ORDER, this.sizeOrder); } catch (_) {}
+    this._rebuildGroups();
+    this._syncTotals();
   },
 
   setLanguage(lang) {
     this.selectedLanguage = lang;
-    this.bookGroups = Catalog.groupedBooks(lang);
+    this.langSheetOpen    = false;
+    try { localStorage.setItem(CONFIG.STORAGE_KEYS.LANGUAGE, lang); } catch (_) {}
+    this._rebuildGroups();
     this._syncTotals();
     this._saveDraft();
   },
 
+  // English/French/Spanish are permanent; a fourth pill appears when the
+  // selected language isn't one of them.
+  primaryLanguages() {
+    const anchors = ANCHOR_LANGUAGES.filter(l => this.bookLanguages.includes(l));
+    if (this.selectedLanguage && !anchors.includes(this.selectedLanguage)) {
+      return [...anchors, this.selectedLanguage];
+    }
+    return anchors;
+  },
+
+  overflowLanguages() {
+    const top = this.primaryLanguages();
+    return this.bookLanguages.filter(l => !top.includes(l));
+  },
+
+  openLangSheet()  { this.langSheetOpen = true; },
+  closeLangSheet() { this.langSheetOpen = false; },
+
   langLabel(lang) {
     return LANG_LABELS[String(lang).toLowerCase()] || lang;
+  },
+
+  // ── Book row display ───────────────────────────────────
+  // One meta line per row: price, then availability. Titles with no price show
+  // availability alone — a missing price is a catalog gap, not a reason to hide
+  // a book that is being handed out.
+
+  bookMeta(book) {
+    const parts = [];
+    if (book.retail_price_cents) parts.push('$' + (book.retail_price_cents / 100).toFixed(0));
+    if (book.is_stack) {
+      // Say "stack of 10", not "10 books": one tap on this row adds ten to the
+      // total, and a bare book count made that jump look like a miscount.
+      parts.push('stack of ' + book.books_per_unit);
+    } else if (typeof book.stock === 'number') {
+      // Depth matters: −1 is drift, −10 means the recorded stock is wrong.
+      if (book.stock < 0)       parts.push('out of stock (−' + Math.abs(book.stock) + ')');
+      else if (book.stock === 0) parts.push('out of stock');
+      else if (book.stock <= 3) parts.push('last ' + book.stock);
+      else                      parts.push(String(book.stock));
+    }
+    return parts.join(' · ');
+  },
+
+  // Dimmed, but "+" stays live: an inaccurate stock count is recoverable,
+  // a lost count is not.
+  bookOut(book) {
+    return !book.is_stack && typeof book.stock === 'number' && book.stock <= 0;
+  },
+
+  // ── Session summary ────────────────────────────────────
+  // Exactly what will be POSTed, one row per counted title. Stacks are why it
+  // exists: one tap adds books_per_unit, so the total can outrun the taps.
+
+  sessionLines() {
+    return Sessions.entries
+      .filter(e => e.qty > 0)
+      .map(e => {
+        const per = e.books_per_unit || 1;
+        // Drafts written before language was snapshotted fall back to the catalog.
+        const lang = e.language || Catalog.books.find(b => b.id === e.book_id)?.language || '';
+        return {
+          title:  e.title,
+          language: lang ? this.langLabel(lang) : '',
+          // Soft and hard variants share a title, so the summary needs the same
+          // disambiguation the picker rows carry.
+          cover:  COVER_LABELS[String(e.category || '')[0]] ? COVER_LABELS[String(e.category)[0]].toUpperCase() : '',
+          qty:    e.qty,
+          per,
+          books:  e.qty * per,
+          points: Math.round(e.qty * (e.points_per_unit || 0) * 100) / 100,
+          isStack: per > 1,
+        };
+      })
+      .sort((a, b) => b.books - a.books);
+  },
+
+  openSummary()  { this.summaryOpen = true;  this.clearConfirm = false; },
+  closeSummary() { this.summaryOpen = false; this.clearConfirm = false; },
+
+  askClearCount()    { this.clearConfirm = true; },
+  cancelClearCount() { this.clearConfirm = false; },
+
+  // Escape hatch for a wrong count — otherwise the only way back to zero was
+  // decrementing every row by hand.
+  clearCount() {
+    const cleared = this.totalBooks;
+    this.clearConfirm = false;
+    Sessions.clear();
+    this._clearDraft();
+    this.summaryOpen = false;
+    this.bookGroups = this.bookGroups.map(group => ({
+      ...group,
+      books: group.books.map(b => ({ ...b, qty: 0 })),
+    }));
+    this._syncTotals();
+    this.goto('books');
+    this._showToast(`Count cleared — ${cleared} book(s) removed.`);
   },
 
   // ── Collection ─────────────────────────────────────────
@@ -342,6 +618,83 @@ export const state = sprae(document.body, {
     this.collectedCents = total;
   },
 
+  // ── Amount & method ────────────────────────────────────
+  // One amount by one method is the default; splitting is opt-in.
+
+  visibleMethods() {
+    return this.allMethodsOpen ? this.paymentMethods : this.paymentMethods.slice(0, PRIMARY_PAYMENT_COUNT);
+  },
+
+  hiddenMethodCount() {
+    return this.allMethodsOpen ? 0 : this.paymentMethods.length - PRIMARY_PAYMENT_COUNT;
+  },
+
+  showAllMethods() { this.allMethodsOpen = true; },
+
+  onTotalInput(e) {
+    this.totalDollars = e.target.value;
+    this._applySingleAmount();
+    this._saveDraft();
+  },
+
+  selectMethod(method) {
+    this.selectedMethod = method;
+    if (!this.splitOpen) this._applySingleAmount();
+    this._saveDraft();
+  },
+
+  // Non-split: the whole amount belongs to one method.
+  _applySingleAmount() {
+    const next = {};
+    for (const k of Object.keys(this.methodDollars)) next[k] = '';
+    next[this.selectedMethod] = this.totalDollars;
+    this.methodDollars = next;
+    this._syncCollected();
+  },
+
+  toggleSplit() {
+    if (this.splitOpen) {
+      // Collapse folds the split into the selected method so the total holds.
+      this.totalDollars = this.collectedCents ? (this.collectedCents / 100).toFixed(2) : '';
+      this.splitOpen = false;
+      this._applySingleAmount();
+    } else {
+      this.splitOpen = true;
+      this.allMethodsOpen = true;
+    }
+    this._saveDraft();
+  },
+
+  onMethodInput(e, method) {
+    this.methodDollars[method] = e.target.value;
+    this._syncCollected();
+    this._saveDraft();
+  },
+
+  // ── Location ───────────────────────────────────────────
+  // Spots the whole temple has used recently, from goloka, so a devotee heading
+  // to a street or festival someone else covered gets the same chip. Falls back
+  // to this device's archive offline.
+
+  recentLocations() {
+    if (this.templeLocations.length > 0) return this.templeLocations;
+    const seen = [];
+    for (const entry of Sessions.getRecent()) {
+      const loc = ((entry.payload && entry.payload.location) || '').trim();
+      if (loc && !seen.includes(loc)) seen.push(loc);
+      if (seen.length >= 4) break;
+    }
+    return seen;
+  },
+
+  setLocation(loc) {
+    this.sessionLocation = this.sessionLocation === loc ? '' : loc;
+    this.locationOpen = false;
+    this._saveDraft();
+  },
+
+  openLocationInput() { this.locationOpen = true; },
+
   // ── Submission ─────────────────────────────────────────
 
   async submitSession() {
@@ -356,10 +709,12 @@ export const state = sprae(document.body, {
 
     this._syncCollected();
 
-    if (this.collectedCents <= 0) {
-      this._showToast('Enter the amount collected before submitting.');
+    if (this.totalBooks === 0) {
+      this._showToast('Count at least one book before submitting.');
       return;
     }
+
+    // $0 is allowed: goloka accepts a session with no payment lines.
 
     // One payment line per method with a positive amount; collected_cents is
     // derived server-side as the sum of these lines.
@@ -398,6 +753,7 @@ export const state = sprae(document.body, {
       this._showToast(`✓ ${booksSubmitted} book(s) registered in Goloka — copy kept on this device.`);
       // Refresh catalog so next session sees the decremented stock.
       Catalog.loadBooks(true).then(() => this._refreshLanguages());
+      this.loadHomeStats();   // the submission just changed rank, streak and totals
     } catch (err) {
       console.warn('[DB] postSession failed:', err.message);
       Sessions.savePending(payload, key, auth.userId);
@@ -440,6 +796,11 @@ export const state = sprae(document.body, {
     this.sessionNote      = '';
     this.methodDollars    = { Cash: '', Card: '', Cheque: '', Interac: '', 'Bank Transfer': '', Other: '' };
     this.collectedCents   = 0;
+    this.totalDollars     = '';
+    this.splitOpen        = false;
+    this.allMethodsOpen   = false;
+    this.locationOpen     = false;
+    this.clearConfirm     = false;
     this.confirmResult    = null;
     this.confirmCountdown = 0;
     this.goto('landing');
@@ -515,6 +876,57 @@ export const state = sprae(document.body, {
     this._showToast('Pending session(s) discarded.');
   },
 
+  // ── Home stats ─────────────────────────────────────────
+  // Derived from two endpoints the POS already reads. Never awaited: the
+  // landing screen must work before these resolve, or offline.
+
+  async loadHomeStats() {
+    if (this.statsLoading) return;
+    this.statsLoading = true;
+    const me = this.userName;
+
+    const [year, month, sessions, templeSessions] = await Promise.all([
+      DB.getLeaderboard('year').catch(() => null),
+      DB.getLeaderboard('month').catch(() => null),
+      DB.getSessions({ distributor: me, from: _daysAgoISO(90) }).catch(() => null),
+      DB.getSessions({ from: _daysAgoISO(30) }).catch(() => null),
+    ]);
+
+    if (year && Array.isArray(year.results)) {
+      const rows = [...year.results].sort((a, b) => b.points - a.points);
+      const i = rows.findIndex(r => r.distributor_name === me);
+      const mine = i === -1 ? null : rows[i];
+      this.myBooksYear  = mine ? mine.books : 0;
+      this.myPointsYear = mine ? Math.round(mine.points * 100) / 100 : 0;
+      this.myRank       = i === -1 ? 0 : i + 1;
+    }
+
+    if (month && Array.isArray(month.results)) {
+      this.templeBooksMonth    = month.results.reduce((s, r) => s + (r.books || 0), 0);
+      this.templeDevoteesMonth = month.results.length;
+    }
+
+    if (Array.isArray(sessions)) {
+      const mySessions = sessions.filter(s => s.distributor_name === me);
+      const last = mySessions[0];
+      this.lastSessionLabel = last ? _relativeDay(last.occurred_at) : '';
+      this.lastSessionBooks = last ? last.total_books : 0;
+      this.streakDays       = _streakDays(mySessions.map(s => s.occurred_at));
+    }
+
+    if (Array.isArray(templeSessions)) {
+      const seen = [];
+      for (const session of templeSessions) {
+        const loc = (session.location || '').trim();
+        if (loc && !seen.includes(loc)) seen.push(loc);
+        if (seen.length >= 4) break;
+      }
+      this.templeLocations = seen;
+    }
+
+    this.statsLoading = false;
+  },
+
   // ── Leaderboard ────────────────────────────────────────
 
   gotoLeaderboard() {
@@ -526,8 +938,16 @@ export const state = sprae(document.body, {
     this.leaderboardLoading = true;
     this.leaderboardRows    = [];
     try {
-      const data = await DB.getLeaderboard(this.leaderboardPeriod);
-      this.leaderboardRows = data.results;
+      // A past month has no endpoint of its own — aggregate its sessions into
+      // the same row shape the leaderboard endpoint returns.
+      let rows;
+      if (this.leaderboardPeriod === 'month' && this.monthOffset > 0) {
+        const { from, to } = _monthRange(this.monthOffset);
+        rows = _aggregateSessions(await DB.getSessions({ from, to }) || []);
+      } else {
+        rows = (await DB.getLeaderboard(this.leaderboardPeriod)).results;
+      }
+      this.leaderboardRows = rows;
       this.applyLeaderboardSort();   // sorts by the active column + numbers rank
     } catch (err) {
       console.warn('[Leaderboard] Failed:', err.message);
@@ -538,7 +958,63 @@ export const state = sprae(document.body, {
 
   setPeriod(period) {
     this.leaderboardPeriod = period;
+    this.showAllLeaders    = false;
+    if (period !== 'month') this.monthOffset = 0;
     this.loadLeaderboard();
+  },
+
+  // Concrete beats relative: "August" and "2026" say what you are looking at,
+  // where "This Month" / "This Year" need a second of thought.
+  periodLabel(period) {
+    if (period === 'month') return _monthRange(this.monthOffset).label;
+    if (period === 'year')  return String(new Date().getFullYear());
+    return 'All time';
+  },
+
+  // Step back through months; never past the current one.
+  stepMonth(delta) {
+    const next = this.monthOffset + delta;
+    if (next < 0) return;
+    this.monthOffset       = next;
+    this.leaderboardPeriod = 'month';
+    this.showAllLeaders    = false;
+    this.loadLeaderboard();
+  },
+
+  myLeaderRow() {
+    return this.leaderboardRows.find(r => r.distributor_name === this.userName) || null;
+  },
+
+  // Distance to the devotee one place above, measured in whatever column the
+  // board is currently ranked by — quoting a book gap while ranked on points
+  // would name a target that does not actually close the gap. Returns '' when
+  // there is nothing meaningful to say (top place, or sorted by name).
+  leaderGap() {
+    const me = this.myLeaderRow();
+    if (!me || me.rank <= 1) return '';
+    const above = this.leaderboardRows.find(r => r.rank === me.rank - 1);
+    const col = this.leaderboardSortBy;
+    if (!above || col === 'distributor_name' || col === 'bbt_pct') return '';
+    const diff = (above[col] || 0) - (me[col] || 0);
+    if (diff <= 0) return '';
+    const target = ' to #' + (me.rank - 1);
+    if (col === 'collected_cents') return '$' + (diff / 100).toFixed(0) + target;
+    if (col === 'points')          return (Math.round(diff * 100) / 100) + ' pts' + target;
+    return diff + ' books' + target;
+  },
+
+  topLeaders() {
+    return this.showAllLeaders ? this.leaderboardRows : this.leaderboardRows.slice(0, 8);
+  },
+
+  hiddenLeaderCount() {
+    return Math.max(0, this.leaderboardRows.length - this.topLeaders().length);
+  },
+
+  revealAllLeaders() { this.showAllLeaders = true; },
+
+  leaderboardBooks() {
+    return this.leaderboardRows.reduce((s, r) => s + (r.books || 0), 0);
   },
 
   // Intuitive first-click direction: names A→Z; "more is better" metrics high→low;
@@ -575,10 +1051,24 @@ export const state = sprae(document.body, {
   // devices), and Google is a one-tap alternative.
 
   _showLogin() {
-    this.authStep     = 'email';
-    this.authPassword = '';
-    this.authOtp      = '';
+    this.authStep      = 'email';
+    this.authPassword  = '';
+    this.authOtp       = '';
+    this.emailFormOpen = false;
     this.goto('login');
+  },
+
+  openEmailForm()  { this.emailFormOpen = true;  this.authError = ''; },
+  closeEmailForm() { this.emailFormOpen = false; this.authError = ''; },
+
+  // "Different email" / "Start over" from the password and OTP steps return to
+  // the email field, not to the Google-first screen the devotee already left.
+  restartEmail() {
+    this.authStep      = 'email';
+    this.authPassword  = '';
+    this.authOtp       = '';
+    this.emailFormOpen = true;
+    this.authError     = '';
   },
 
   async authSubmitEmail() {
@@ -763,6 +1253,18 @@ export const state = sprae(document.body, {
       this.isOffline = true;
       this.retryPending();
     }
+
+    this.loadHomeStats();   // not awaited — the home screen fills in as it lands
+  },
+
+  // Initials for the header avatar: first letters of the display name.
+  userInitials() {
+    return (this.userName || '')
+      .split(/[\s&]+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map(w => w[0].toUpperCase())
+      .join('');
   },
 });
 

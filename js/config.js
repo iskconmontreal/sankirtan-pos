@@ -15,6 +15,8 @@ export const CONFIG = {
     PENDING:       'sankirtan_pending', // queued failed submissions
     RECENT:        'sankirtan_recent',  // last submitted sessions
     DRAFT:         'sankirtan_draft',   // in-progress count; cleared only on confirmed Goloka submit
+    LANGUAGE:      'sankirtan_language',   // last language filter, restored on load
+    SIZE_ORDER:    'sankirtan_size_order', // 'desc' (Mahabig first) | 'asc'
   },
 };
 
@@ -41,7 +43,9 @@ export const CATEGORY_LABELS = {
 export const CATEGORY_ORDER = ['S4','S3','S2','S1','H4','H3','H2','H1'];
 
 export const SIZE_LABELS  = { 1: 'Small', 2: 'Medium', 3: 'Big', 4: 'Mahabig' };
-export const SIZE_ORDER   = [1, 2, 3, 4];
+// Highest-value books first: Mahabig (2 pt) is what a devotee reaches for most,
+// so it leads the list instead of sitting below four other groups.
+export const SIZE_ORDER   = [4, 3, 2, 1];
 export const COVER_LABELS = { S: 'Soft', H: 'Hard' };
 export const COVER_ORDER  = ['S', 'H'];
 
@@ -52,14 +56,24 @@ export const LANG_LABELS = {
 
 export const LANG_ORDER = ['English', 'French', 'Spanish', 'Arabic', 'Bengali', 'Hindi'];
 
+// Always shown in the language bar; picking another language adds a pill
+// beside these rather than replacing one.
+export const ANCHOR_LANGUAGES = ['English', 'French', 'Spanish'];
+
 // Payment methods offered at the POS. A session's donation can be split across
 // several methods; the collector keys each one independently and the total is the
 // sum of them. goloka books one finance income row per method.
+// Labels carry no emoji: they rendered as inconsistent platform glyphs and added
+// nothing. `value` is what goloka stores — never change it without matching the
+// CHECK on sankirtan_session_payments.method.
 export const PAYMENT_METHODS = [
-  { value: 'Cash',          label: '💵 Cash' },
-  { value: 'Card',          label: '💳 Card' },
-  { value: 'Cheque',        label: '🧾 Cheque' },
-  { value: 'Interac',       label: '📲 Interac' },
-  { value: 'Bank Transfer', label: '🏦 Bank Transfer' },
-  { value: 'Other',         label: '🪙 Other' },
+  { value: 'Cash',          label: 'Cash' },
+  { value: 'Card',          label: 'Card' },
+  { value: 'Interac',       label: 'Interac' },
+  { value: 'Cheque',        label: 'Cheque' },
+  { value: 'Bank Transfer', label: 'Bank Transfer' },
+  { value: 'Other',         label: 'Other' },
 ];
+
+// The four that fit one row on a phone; the rest appear when "+" is tapped.
+export const PRIMARY_PAYMENT_COUNT = 4;
