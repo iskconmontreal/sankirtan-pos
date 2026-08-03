@@ -302,6 +302,28 @@ export const state = sprae(document.body, {
     this.catalogLoading = false;
   },
 
+  // Background catalog revalidation, for stock changed by OTHER devices on the
+  // same account: this device only force-refreshes after its own submit, so a
+  // second phone's submission would otherwise stay invisible until re-login.
+  // Called on app resume / reconnect (see the auto-sync block at the bottom).
+  // Throttled, and re-renders only when the server data actually changed.
+  _catalogRefreshing: false,
+  _catalogRefreshedAt: 0,
+  async refreshCatalog() {
+    if (this._catalogRefreshing || !navigator.onLine || !auth.active) return;
+    if (Date.now() - this._catalogRefreshedAt < 30000) return;
+    this._catalogRefreshing = true;
+    try {
+      if (await Catalog.refreshBooks()) {
+        this._refreshLanguages();
+        this._syncTotals();   // re-hydrate the in-progress qtys after the rebuild
+      }
+      this._catalogRefreshedAt = Date.now();
+    } finally {
+      this._catalogRefreshing = false;
+    }
+  },
+
   incQty(book) {
     const newQty = (Sessions.getQty(book.id) || 0) + 1;
     Sessions.setQty(book.id, newQty, book);
@@ -1286,9 +1308,9 @@ async function _autoSync() {
   try { await state.retryPending(); }
   finally { _autoSyncing = false; }
 }
-window.addEventListener('online', _autoSync);
+window.addEventListener('online', () => { _autoSync(); state.refreshCatalog(); });
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') _autoSync();
+  if (document.visibilityState === 'visible') { _autoSync(); state.refreshCatalog(); }
   // 'hidden' fires right before iOS Safari backgrounds/evicts the tab on
   // screen-lock — flush the in-progress count to disk before it can be lost.
   else state._saveDraft();

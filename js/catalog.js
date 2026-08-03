@@ -50,8 +50,6 @@ export const Catalog = {
   // ── Books ────────────────────────────────────────────────
 
   async loadBooks(force = false) {
-    if (force) localStorage.removeItem(CONFIG.STORAGE_KEYS.CATALOG_CACHE);
-
     if (!force) {
       const cached = Catalog._readCache(CONFIG.STORAGE_KEYS.CATALOG_CACHE);
       if (cached) {
@@ -60,6 +58,32 @@ export const Catalog = {
       }
     }
 
+    const fresh = await Catalog._fetchAndCache();
+    if (fresh) return { source: 'api', count: fresh.length };
+
+    // Fetch failed — fall back to the cache even on a forced load, so a
+    // refresh interrupted by a network drop never leaves the picker empty.
+    const cached = Catalog._readCache(CONFIG.STORAGE_KEYS.CATALOG_CACHE);
+    if (cached) {
+      Catalog.books = cached;
+      return { source: 'cache', count: cached.length };
+    }
+
+    Catalog.books = [];
+    return { source: 'empty', count: 0 };
+  },
+
+  // Background revalidation: the cached catalog (stock included) goes stale the
+  // moment another device on the same account submits, so callers re-fetch on
+  // app resume. Returns true only when something actually changed, so callers
+  // re-render only then. Errors are swallowed — offline keeps the cached view.
+  async refreshBooks() {
+    const before = JSON.stringify(Catalog.books);
+    const fresh = await Catalog._fetchAndCache();
+    return !!fresh && JSON.stringify(fresh) !== before;
+  },
+
+  async _fetchAndCache() {
     try {
       const books = await DB.getBooks();
       const active = books
@@ -67,18 +91,11 @@ export const Catalog = {
         .map(b => ({ ...b, points_per_unit: b.points_per_unit ?? CATEGORY_POINTS[b.category] ?? 0, books_per_unit: b.books_per_unit ?? 1 }));
       Catalog.books = active;
       Catalog._writeCache(CONFIG.STORAGE_KEYS.CATALOG_CACHE, active);
-      return { source: 'api', count: active.length };
+      return active;
     } catch (err) {
       console.warn('[Catalog] Books fetch failed:', err.message);
-      const cached = Catalog._readCache(CONFIG.STORAGE_KEYS.CATALOG_CACHE);
-      if (cached) {
-        Catalog.books = cached;
-        return { source: 'cache', count: cached.length };
-      }
+      return null;
     }
-
-    Catalog.books = [];
-    return { source: 'empty', count: 0 };
   },
 
   // ── Grouped books ─────────────────────────────────────────
