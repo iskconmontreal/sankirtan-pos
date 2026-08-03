@@ -265,33 +265,37 @@
         </div>
       </div>
 
-      <div :if="!searchQuery" :each="group in bookGroups" class="book-group">
-        <div class="book-group-header">
-          <span class="book-group-label" :text="group.label"></span>
-          <span class="book-group-pts" :if="group.points != null" :text="group.points + ' pt'"></span>
-          <span class="book-group-rule"></span>
-          <span class="book-group-count" :text="group.books.length"></span>
-        </div>
-
-        <div :each="book in group.books"
-             :class="bookOut(book) ? 'book-row book-row--out' : 'book-row'">
-          <div class="book-info">
-            <div class="book-line">
-              <span class="book-title" :title="book.title" :text="book.title"></span>
-              <span class="cover-pill" :if="book.coverPill"
-                    :class="book.coverKey === 'H' ? 'cover-pill--hard' : 'cover-pill--soft'"
-                    :text="book.coverPill"></span>
-            </div>
-            <span class="book-meta" :text="bookMeta(book)"></span>
+      <!-- :if and :each must not share an element: :if detaches the node while
+           :each inserts clones relative to it, so the list renders into nothing. -->
+      <div :if="!searchQuery">
+        <div :each="group in bookGroups" class="book-group">
+          <div class="book-group-header">
+            <span class="book-group-label" :text="group.label"></span>
+            <span class="book-group-pts" :if="group.points != null" :text="group.points + ' pt'"></span>
+            <span class="book-group-rule"></span>
+            <span class="book-group-count" :text="group.books.length"></span>
           </div>
-          <div class="qty-controls">
-            <button class="qty-btn qty-btn--minus" :onclick="decQty(book)"
-                    :class="book.qty > 0 ? '' : 'is-zero'" aria-label="Remove one">−</button>
-            <input class="qty-input" type="text" inputmode="numeric" placeholder="0"
-                   :class="book.qty > 0 ? '' : 'is-zero'"
-                   :value="book.qty || ''" onfocus="this.select()"
-                   :oninput="e => setBookQty(book, e.target.value)">
-            <button class="qty-btn qty-btn--plus" :onclick="incQty(book)" aria-label="Add one">+</button>
+
+          <div :each="book in group.books"
+               :class="bookOut(book) ? 'book-row book-row--out' : 'book-row'">
+            <div class="book-info">
+              <div class="book-line">
+                <span class="book-title" :title="book.title" :text="book.title"></span>
+                <span class="cover-pill" :if="book.coverPill"
+                      :class="book.coverKey === 'H' ? 'cover-pill--hard' : 'cover-pill--soft'"
+                      :text="book.coverPill"></span>
+              </div>
+              <span class="book-meta" :text="bookMeta(book)"></span>
+            </div>
+            <div class="qty-controls">
+              <button class="qty-btn qty-btn--minus" :onclick="decQty(book)"
+                      :class="book.qty > 0 ? '' : 'is-zero'" aria-label="Remove one">−</button>
+              <input class="qty-input" type="text" inputmode="numeric" placeholder="0"
+                     :class="book.qty > 0 ? '' : 'is-zero'"
+                     :value="book.qty || ''" onfocus="this.select()"
+                     :oninput="e => setBookQty(book, e.target.value)">
+              <button class="qty-btn qty-btn--plus" :onclick="incQty(book)" aria-label="Add one">+</button>
+            </div>
           </div>
         </div>
       </div>
@@ -325,7 +329,13 @@
       <div class="summary-card">
         <div class="summary-head">
           <span class="sheet-title">This session</span>
-          <button class="link-btn link-btn--danger" :onclick="clearCount()">Clear count</button>
+          <button class="link-btn link-btn--danger" :if="!clearConfirm"
+                  :onclick="askClearCount()">Clear count</button>
+          <div class="confirm-row" :if="clearConfirm">
+            <span class="confirm-text" :text="'Clear all ' + totalBooks + '?'"></span>
+            <button class="btn btn-sm btn-outline-dark" :onclick="cancelClearCount()">No</button>
+            <button class="btn btn-sm btn-danger" :onclick="clearCount()">Yes, clear</button>
+          </div>
         </div>
         <div class="sum-list">
           <div class="sum-row" :each="line in sessionLines()">
@@ -562,7 +572,13 @@
       <span :text="totalBooks + (totalBooks === 1 ? ' book' : ' books')"></span>
       <span class="sum-foot-pts" :text="totalPoints + ' pts'"></span>
     </div>
-    <button class="btn btn-outline-dark btn-block sum-clear" :onclick="clearCount()">Clear count</button>
+    <button class="btn btn-danger-outline btn-block sum-clear" :if="!clearConfirm"
+            :onclick="askClearCount()">Clear count</button>
+    <div class="confirm-row confirm-row--block" :if="clearConfirm">
+      <span class="confirm-text" :text="'Clear all ' + totalBooks + ' book(s)?'"></span>
+      <button class="btn btn-sm btn-outline-dark" :onclick="cancelClearCount()">No</button>
+      <button class="btn btn-sm btn-danger" :onclick="clearCount()">Yes, clear</button>
+    </div>
   </div>
 
   <!-- ═══════════════════ LANGUAGE SHEET ═══════════════════ -->

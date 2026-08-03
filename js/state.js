@@ -181,6 +181,7 @@ export const state = sprae(document.body, {
   submitting:       false,
 
   summaryOpen:      false,
+  clearConfirm:     false,
 
   // Confirmation
   confirmResult:    null,
@@ -563,13 +564,17 @@ export const state = sprae(document.body, {
       .sort((a, b) => b.books - a.books);
   },
 
-  openSummary()  { this.summaryOpen = true; },
-  closeSummary() { this.summaryOpen = false; },
+  openSummary()  { this.summaryOpen = true;  this.clearConfirm = false; },
+  closeSummary() { this.summaryOpen = false; this.clearConfirm = false; },
+
+  askClearCount()    { this.clearConfirm = true; },
+  cancelClearCount() { this.clearConfirm = false; },
 
   // Escape hatch for a wrong count — otherwise the only way back to zero was
   // decrementing every row by hand.
   clearCount() {
     const cleared = this.totalBooks;
+    this.clearConfirm = false;
     Sessions.clear();
     this._clearDraft();
     this.summaryOpen = false;
@@ -795,6 +800,7 @@ export const state = sprae(document.body, {
     this.splitOpen        = false;
     this.allMethodsOpen   = false;
     this.locationOpen     = false;
+    this.clearConfirm     = false;
     this.confirmResult    = null;
     this.confirmCountdown = 0;
     this.goto('landing');
