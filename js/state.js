@@ -1085,24 +1085,6 @@ export const state = sprae(document.body, {
     return this.myLeaderRow() || this.myGroupRow();
   },
 
-  // Distance to the devotee one place above, measured in whatever column the
-  // board is currently ranked by — quoting a book gap while ranked on points
-  // would name a target that does not actually close the gap. Returns '' when
-  // there is nothing meaningful to say (top place, or sorted by name).
-  leaderGap() {
-    const me = this.myRankRow();
-    if (!me || me.rank <= 1) return '';
-    const above = this.leaderboardRows.find(r => r.rank === me.rank - 1);
-    const col = this.leaderboardSortBy;
-    if (!above || col === 'distributor_name' || col === 'bbt_pct') return '';
-    const diff = (above[col] || 0) - (me[col] || 0);
-    if (diff <= 0) return '';
-    const target = ' to #' + (me.rank - 1);
-    if (col === 'collected_cents') return '$' + (diff / 100).toFixed(0) + target;
-    if (col === 'points')          return (Math.round(diff * 100) / 100) + ' pts' + target;
-    return diff + ' books' + target;
-  },
-
   topLeaders() {
     return this.showAllLeaders ? this.leaderboardRows : this.leaderboardRows.slice(0, 8);
   },

@@ -1393,7 +1393,6 @@ body {
   flex-shrink: 0;
 }
 .rank-streak { font-size: 0.75rem; font-weight: 600; color: var(--c-ok); }
-.rank-gap { font-size: 0.656rem; color: var(--c-text-dim); margin-top: 2px; }
 
 /* ── Leader cards ── */
 .leader-list { display: flex; flex-direction: column; gap: var(--s-sm); }
