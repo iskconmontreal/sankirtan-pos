@@ -480,16 +480,26 @@
           <span class="temple-card-kicker" :text="'TEMPLE TOTAL · ' + periodLabel(leaderboardPeriod).toUpperCase()"></span>
           <div class="temple-card-value" :text="leaderboardBooks().toLocaleString()"></div>
           <div class="temple-card-caption"
-               :text="'books · ' + leaderboardRows.length + (leaderboardRows.length === 1 ? ' devotee' : ' devotees')"></div>
+               :text="'books · ' + leaderboardDevotees() + (leaderboardDevotees() === 1 ? ' devotee' : ' devotees')"></div>
+        </div>
+
+        <!-- Devotees sharing an entity arrive merged; each devotee picks how to see them. -->
+        <div class="segmented segmented--sub" :if="hasGroups()">
+          <button class="segment" :class="leaderboardView === 'group' ? 'segment--on' : ''"
+                  :onclick="setLeaderboardView('group')">Groups</button>
+          <button class="segment" :class="leaderboardView === 'individual' ? 'segment--on' : ''"
+                  :onclick="setLeaderboardView('individual')">Devotees</button>
         </div>
 
         <!-- Your own row, pinned regardless of where it sorts. -->
-        <div class="rank-card" :if="myLeaderRow()">
-          <div class="rank-tile" :text="'#' + myLeaderRow().rank"></div>
+        <div class="rank-card" :if="myRankRow()">
+          <div class="rank-tile" :text="'#' + myRankRow().rank"></div>
           <div class="rank-body">
-            <div class="rank-name" :text="'You — ' + myLeaderRow().distributor_name"></div>
-            <div class="rank-meta"
-                 :text="myLeaderRow().books + ' books · ' + myLeaderRow().points + ' pts · $' + (myLeaderRow().collected_cents / 100).toFixed(0)"></div>
+            <div class="rank-name" :text="'You — ' + (myOwnRow() || myRankRow()).distributor_name"></div>
+            <div class="rank-meta" :if="myOwnRow()"
+                 :text="myOwnRow().books + ' books · ' + myOwnRow().points + ' pts · $' + (myOwnRow().collected_cents / 100).toFixed(0)"></div>
+            <div class="rank-group" :if="myGroupRow()"
+                 :text="'ranked with ' + myGroupRow().distributor_name + ' · ' + myGroupRow().books + ' books together'"></div>
           </div>
           <div class="rank-aside">
             <div class="rank-streak" :if="streakDays > 1" :text="streakDays + '-day streak'"></div>
@@ -498,18 +508,32 @@
         </div>
 
         <div class="leader-list">
-          <div class="leader-card" :each="row in topLeaders()"
-               :class="row.distributor_name === userName ? 'leader-card--me' : ''">
-            <span class="leader-rank" :text="row.rank"></span>
-            <span class="leader-name" :text="row.distributor_name"></span>
-            <span class="leader-stat">
-              <b :text="row.books"></b><i>books</i>
-            </span>
-            <span class="leader-stat leader-stat--money">
-              <b :text="'$' + (row.collected_cents / 100).toFixed(0)"></b>
-              <i class="bbt-tap" :onclick="openBbtInfo()"
-                 :text="(row.bbt_pct == null ? 'BBT —' : 'BBT ' + Math.round(row.bbt_pct) + '%') + ' ⓘ'"></i>
-            </span>
+          <div :each="row in topLeaders()">
+            <div class="leader-card"
+                 :class="(isMe(row) ? 'leader-card--me' : '') + (row.is_group ? ' leader-card--group' : '')"
+                 :onclick="toggleGroup(row)">
+              <span class="leader-rank" :text="row.rank"></span>
+              <span class="leader-name" :text="row.distributor_name"></span>
+              <span class="leader-chev" :if="row.is_group"
+                    :text="(isGroupExpanded(row) ? '▾ ' : '▸ ') + row.members.length"></span>
+              <span class="leader-stat">
+                <b :text="row.books"></b><i>books</i>
+              </span>
+              <span class="leader-stat leader-stat--money">
+                <b :text="'$' + (row.collected_cents / 100).toFixed(0)"></b>
+                <i class="bbt-tap" :onclick.stop="openBbtInfo()"
+                   :text="(row.bbt_pct == null ? 'BBT —' : 'BBT ' + Math.round(row.bbt_pct) + '%') + ' ⓘ'"></i>
+              </span>
+            </div>
+
+            <div class="leader-members" :if="row.is_group && isGroupExpanded(row)">
+              <div class="leader-member" :each="m in row.members"
+                   :class="isMe(m) ? 'leader-member--me' : ''">
+                <span class="leader-member-name" :text="m.distributor_name"></span>
+                <span class="leader-member-stat"
+                      :text="m.books + ' books · ' + m.points + ' pts · $' + (m.collected_cents / 100).toFixed(0)"></span>
+              </div>
+            </div>
           </div>
 
           <button class="leader-more" :if="hiddenLeaderCount() > 0" :onclick="revealAllLeaders()"
@@ -536,7 +560,8 @@
             <tr :each="row in leaderboardRows"
                 :class="row.distributor_name === lastDevotee ? 'lb-row lb-highlight' : 'lb-row'">
               <td class="lb-rank" :text="row.rank"></td>
-              <td class="lb-name" :text="row.distributor_name"></td>
+              <td class="lb-name"
+                  :text="row.distributor_name + (row.is_group ? ' · ' + row.members.length + ' devotees' : '')"></td>
               <td class="lb-num" :text="row.books"></td>
               <td class="lb-num" :text="row.points"></td>
               <td class="lb-num" :text="'$' + (row.collected_cents / 100).toFixed(0)"></td>

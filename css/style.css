@@ -1306,6 +1306,10 @@ body {
   box-shadow: var(--sh-sm);
 }
 
+/* Secondary toggle under the period control — same shape, quieter. */
+.segmented--sub { margin: calc(-1 * var(--s-xs)) 0 var(--s-md); }
+.segmented--sub .segment { min-height: 32px; padding: 6px; font-size: 0.688rem; }
+
 .segment--month {
   display: flex;
   align-items: center;
@@ -1380,6 +1384,7 @@ body {
   white-space: nowrap;
 }
 .rank-meta { font-size: 0.719rem; color: var(--c-text-dim); margin-top: 2px; }
+.rank-group { font-size: 0.656rem; color: var(--c-sankirtan-strong); margin-top: 3px; }
 
 .rank-aside {
   text-align: right;
@@ -1434,6 +1439,50 @@ body {
 .leader-stat b { font-size: 0.875rem; font-weight: 700; color: var(--c-text); font-variant-numeric: tabular-nums; }
 .leader-stat i { font-size: 0.625rem; font-style: normal; color: var(--c-text-dim); }
 .leader-stat--money { min-width: 3.25rem; }
+
+.leader-card--group { cursor: pointer; }
+
+.leader-chev {
+  flex-shrink: 0;
+  font-size: 0.688rem;
+  font-weight: 600;
+  color: var(--c-text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.leader-members {
+  display: flex;
+  flex-direction: column;
+  margin: 2px 0 0 26px;
+  padding-left: 12px;
+  border-left: 2px solid var(--c-border);
+}
+
+.leader-member {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 4px;
+  font-size: 0.75rem;
+}
+.leader-member + .leader-member { border-top: 1px solid var(--c-border); }
+.leader-member--me .leader-member-name { color: var(--c-sankirtan-strong); font-weight: 700; }
+
+.leader-member-name {
+  min-width: 0;
+  font-weight: 600;
+  color: var(--c-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.leader-member-stat {
+  flex-shrink: 0;
+  color: var(--c-text-dim);
+  font-variant-numeric: tabular-nums;
+}
 
 .leader-more {
   padding: 13px;

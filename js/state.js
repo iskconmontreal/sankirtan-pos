@@ -105,7 +105,8 @@ function _aggregateSessions(sessions) {
   for (const s of sessions) {
     const name = s.distributor_name || '—';
     const row = by.get(name) || {
-      distributor_name: name, books: 0, points: 0,
+      distributor_name: name, distributor_id: s.distributor_id || 0,
+      books: 0, points: 0,
       collected_cents: 0, cost_cents: 0, session_count: 0, bbt_pct: null,
     };
     row.books           += s.total_books || 0;
@@ -120,6 +121,16 @@ function _aggregateSessions(sessions) {
     points:  Math.round(r.points * 100) / 100,
     bbt_pct: r.collected_cents > 0 ? (r.cost_cents / r.collected_cents) * 100 : null,
   }));
+}
+
+function _readView() {
+  try { return localStorage.getItem(CONFIG.STORAGE_KEYS.LB_VIEW) === 'individual' ? 'individual' : 'group'; }
+  catch (_) { return 'group'; }
+}
+
+// Group rows carry their devotees in `members`; everything else is already one.
+function _splitGroups(rows) {
+  return rows.flatMap(r => (r.is_group && r.members?.length ? r.members : [r]));
 }
 
 function _readJSON(key, fallback) {
@@ -191,10 +202,15 @@ export const state = sprae(document.body, {
 
   // Leaderboard
   leaderboardPeriod:   'month',
-  leaderboardRows:     [],
+  leaderboardRows:     [],      // rendered rows, derived from the raw ones by the active view
+  leaderboardRawRows:  [],      // as returned by the API, groups still folded
   leaderboardLoading:  false,
   leaderboardSortBy:   'points',
   leaderboardSortDir:  'desc',
+  // Devotees sharing a group (meta.group in goloka) come back as one merged row.
+  // 'group' keeps it merged, 'individual' splits it back into devotees.
+  leaderboardView:     _readView(),
+  expandedGroups:      [],      // group names currently showing their members
   monthOffset:         0,   // 0 = current month, 1 = last month, …
   lastDevotee:         '',
 
@@ -915,9 +931,10 @@ export const state = sprae(document.body, {
       DB.getSessions({ from: _daysAgoISO(30) }).catch(() => null),
     ]);
 
+    // Home stats are personal — split groups so my own totals show, not my group's.
     if (year && Array.isArray(year.results)) {
-      const rows = [...year.results].sort((a, b) => b.points - a.points);
-      const i = rows.findIndex(r => r.distributor_name === me);
+      const rows = _splitGroups(year.results).sort((a, b) => b.points - a.points);
+      const i = rows.findIndex(r => this.isMe(r));
       const mine = i === -1 ? null : rows[i];
       this.myBooksYear  = mine ? mine.books : 0;
       this.myPointsYear = mine ? Math.round(mine.points * 100) / 100 : 0;
@@ -926,7 +943,7 @@ export const state = sprae(document.body, {
 
     if (month && Array.isArray(month.results)) {
       this.templeBooksMonth    = month.results.reduce((s, r) => s + (r.books || 0), 0);
-      this.templeDevoteesMonth = month.results.length;
+      this.templeDevoteesMonth = _splitGroups(month.results).length;
     }
 
     if (Array.isArray(sessions)) {
@@ -970,8 +987,9 @@ export const state = sprae(document.body, {
       } else {
         rows = (await DB.getLeaderboard(this.leaderboardPeriod)).results;
       }
-      this.leaderboardRows = rows;
-      this.applyLeaderboardSort();   // sorts by the active column + numbers rank
+      this.leaderboardRawRows = rows;
+      this.expandedGroups     = [];
+      this._applyLeaderboardView();   // derives the rows, then sorts and ranks them
     } catch (err) {
       console.warn('[Leaderboard] Failed:', err.message);
       this._showToast('Could not load leaderboard: ' + err.message);
@@ -984,6 +1002,39 @@ export const state = sprae(document.body, {
     this.showAllLeaders    = false;
     if (period !== 'month') this.monthOffset = 0;
     this.loadLeaderboard();
+  },
+
+  // ── Group / individual view ────────────────────────────
+
+  _applyLeaderboardView() {
+    this.leaderboardRows = this.leaderboardView === 'individual'
+      ? _splitGroups(this.leaderboardRawRows)
+      : this.leaderboardRawRows;
+    this.applyLeaderboardSort();
+  },
+
+  setLeaderboardView(view) {
+    if (this.leaderboardView === view) return;
+    this.leaderboardView = view;
+    this.expandedGroups  = [];
+    try { localStorage.setItem(CONFIG.STORAGE_KEYS.LB_VIEW, view); } catch (_) {}
+    this._applyLeaderboardView();
+  },
+
+  hasGroups() {
+    return this.leaderboardRawRows.some(r => r.is_group);
+  },
+
+  isGroupExpanded(row) {
+    return this.expandedGroups.includes(row.distributor_name);
+  },
+
+  toggleGroup(row) {
+    if (!row.is_group) return;
+    const name = row.distributor_name;
+    this.expandedGroups = this.isGroupExpanded(row)
+      ? this.expandedGroups.filter(n => n !== name)
+      : [...this.expandedGroups, name];
   },
 
   // Concrete beats relative: "August" and "2026" say what you are looking at,
@@ -1004,8 +1055,34 @@ export const state = sprae(document.body, {
     this.loadLeaderboard();
   },
 
+  // Rows carry the distributor's user id; match on that, since a devotee folded
+  // into a group no longer appears under their own name.
+  isMe(row) {
+    const id = Number(auth.userId);
+    if (id && row.distributor_id) return row.distributor_id === id;
+    return row.distributor_name === this.userName;
+  },
+
   myLeaderRow() {
-    return this.leaderboardRows.find(r => r.distributor_name === this.userName) || null;
+    return this.leaderboardRows.find(r => this.isMe(r)) || null;
+  },
+
+  // The group I distribute under, when the board is merged and I'm inside one.
+  myGroupRow() {
+    if (this.leaderboardView !== 'group') return null;
+    return this.leaderboardRows.find(r => r.is_group && (r.members || []).some(m => this.isMe(m))) || null;
+  },
+
+  // My own totals, whether or not a group is hiding them.
+  myOwnRow() {
+    const group = this.myGroupRow();
+    if (group) return group.members.find(m => this.isMe(m)) || null;
+    return this.myLeaderRow();
+  },
+
+  // The ranked row I sit in: my own, or the group standing in for me.
+  myRankRow() {
+    return this.myLeaderRow() || this.myGroupRow();
   },
 
   // Distance to the devotee one place above, measured in whatever column the
@@ -1013,7 +1090,7 @@ export const state = sprae(document.body, {
   // would name a target that does not actually close the gap. Returns '' when
   // there is nothing meaningful to say (top place, or sorted by name).
   leaderGap() {
-    const me = this.myLeaderRow();
+    const me = this.myRankRow();
     if (!me || me.rank <= 1) return '';
     const above = this.leaderboardRows.find(r => r.rank === me.rank - 1);
     const col = this.leaderboardSortBy;
@@ -1041,6 +1118,11 @@ export const state = sprae(document.body, {
 
   leaderboardBooks() {
     return this.leaderboardRows.reduce((s, r) => s + (r.books || 0), 0);
+  },
+
+  // Counts devotees, not group rows, so the caption reads the same in both views.
+  leaderboardDevotees() {
+    return _splitGroups(this.leaderboardRawRows).length;
   },
 
   // Intuitive first-click direction: names A→Z; "more is better" metrics high→low;

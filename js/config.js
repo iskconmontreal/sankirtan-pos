@@ -17,6 +17,7 @@ export const CONFIG = {
     DRAFT:         'sankirtan_draft',   // in-progress count; cleared only on confirmed Goloka submit
     LANGUAGE:      'sankirtan_language',   // last language filter, restored on load
     SIZE_ORDER:    'sankirtan_size_order', // 'desc' (Mahabig first) | 'asc'
+    LB_VIEW:       'sankirtan_lb_view',    // leaderboard: 'group' | 'individual'
   },
 };
 
