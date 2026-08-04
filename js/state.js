@@ -1283,10 +1283,11 @@ export const state = sprae(document.body, {
     this.loadHomeStats();   // not awaited — the home screen fills in as it lands
   },
 
-  // Initials for the header avatar: first letters of the display name.
+  // Initials for the header avatar: first letters of the display name. "+" splits
+  // too — logins before goloka's %20 fix cached names like "Luv+Prabhu".
   userInitials() {
     return (this.userName || '')
-      .split(/[\s&]+/)
+      .split(/[\s&+]+/)
       .filter(Boolean)
       .slice(0, 2)
       .map(w => w[0].toUpperCase())
