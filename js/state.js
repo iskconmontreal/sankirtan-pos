@@ -742,7 +742,7 @@ export const state = sprae(document.body, {
     // Writing requires sankirtan:create (sankirtan:view is read-only). Catch it
     // here with a clear message instead of letting the API return a bare 403.
     if (!auth.can('sankirtan:create')) {
-      this._showToast('This account can only view — ask the temple admin for the Book Distributor role to submit sessions.');
+      this._showToast('This account can only view — ask your sankirtan leader for the Book Distributor role to submit sessions.');
       return;
     }
 
@@ -1306,7 +1306,12 @@ export const state = sprae(document.body, {
     // Returning from the Google OAuth redirect lands here with #token=… in the
     // URL fragment; capture() stores it and scrubs the fragment from history.
     auth.capture();
-    if (!auth.active) { this._showLogin(); return; }
+    const authMsg = auth.takeMessage();
+    if (!auth.active) {
+      this._showLogin();
+      this.authError = authMsg;
+      return;
+    }
     await this._postLogin();
   },
 
@@ -1316,7 +1321,7 @@ export const state = sprae(document.body, {
     if (!auth.can('sankirtan:view')) {
       auth.clear();
       this._showLogin();
-      this.authError = 'This account has no book-distribution access — ask the temple admin for the Book Distributor role.';
+      this.authError = 'This account has no book-distribution access — ask your sankirtan leader for the Book Distributor role.';
       return;
     }
     this.userName = auth.displayName();

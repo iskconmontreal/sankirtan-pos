@@ -77,4 +77,16 @@ export const auth = {
     history.replaceState(null, '', window.location.pathname + window.location.search);
     return true;
   },
+
+  // A failed Google sign-in comes back as ?msg=… instead of a token fragment.
+  // Read once and scrub, so a reload can't resurrect a stale error.
+  takeMessage() {
+    const params = new URLSearchParams(window.location.search);
+    const msg = params.get('msg');
+    if (!msg) return '';
+    params.delete('msg');
+    const qs = params.toString();
+    history.replaceState(null, '', window.location.pathname + (qs ? '?' + qs : '') + window.location.hash);
+    return msg;
+  },
 };
