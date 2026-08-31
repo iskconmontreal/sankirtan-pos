@@ -40,6 +40,8 @@ export const Sessions = {
         cost_cents:         book.cost_cents,
         retail_price_cents: book.retail_price_cents,
         books_per_unit:     book.books_per_unit || 1,
+        // books_per_unit > 1 no longer implies a stack (ebundles count as 2).
+        is_stack:           !!book.is_stack,
       });
     }
   },

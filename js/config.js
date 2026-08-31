@@ -26,11 +26,13 @@ for (const k of ['sankirtan_config', 'sankirtan_devotees_cache']) {
   try { localStorage.removeItem(k); } catch (_) {}
 }
 
+// E values arrive pre-doubled from the server (an ebundle counts as 2 books);
+// the POS never multiplies points itself.
 export const CATEGORY_POINTS = {
-  S1: 0.25, H1: 0.25,
-  S2: 0.5,  H2: 0.5,
-  S3: 1.0,  H3: 1.0,
-  S4: 2.0,  H4: 2.0,
+  S1: 0.25, H1: 0.25, A1: 0.25, E1: 0.5,
+  S2: 0.5,  H2: 0.5,  A2: 0.5,  E2: 1.0,
+  S3: 1.0,  H3: 1.0,  A3: 1.0,  E3: 2.0,
+  S4: 2.0,  H4: 2.0,  A4: 2.0,  E4: 4.0,
 };
 
 export const CATEGORY_LABELS = {
@@ -47,8 +49,10 @@ export const SIZE_LABELS  = { 1: 'Small', 2: 'Medium', 3: 'Big', 4: 'Mahabig' };
 // Highest-value books first: Mahabig (2 pt) is what a devotee reaches for most,
 // so it leads the list instead of sitting below four other groups.
 export const SIZE_ORDER   = [4, 3, 2, 1];
-export const COVER_LABELS = { S: 'Soft', H: 'Hard' };
-export const COVER_ORDER  = ['S', 'H'];
+export const COVER_LABELS = { S: 'Soft', H: 'Hard', A: 'Audiobook', E: 'Ebook + audiobook' };
+export const COVER_ORDER  = ['S', 'H', 'A', 'E'];
+// Pill text stays shorter than the label — it sits beside the title in a badge.
+export const COVER_PILLS  = { S: 'SOFT', H: 'HARD', A: 'AUDIO', E: 'EBUNDLE' };
 
 export const LANG_LABELS = {
   en: 'English', eng: 'English', english: 'English',

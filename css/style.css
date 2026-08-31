@@ -802,6 +802,14 @@ body {
   background: var(--c-text);
   color: var(--c-white);
 }
+.cover-pill--audio {
+  background: var(--c-accent-active);
+  color: var(--c-sankirtan-strong);
+}
+.cover-pill--ebundle {
+  background: var(--c-ok-active);
+  color: var(--c-ok);
+}
 
 .book-meta {
   font-size: 0.719rem;

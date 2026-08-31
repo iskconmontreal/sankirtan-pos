@@ -4,7 +4,7 @@
 */
 
 import sprae from './vendor/sprae.js';
-import { CONFIG, LANG_LABELS, COVER_LABELS, PAYMENT_METHODS, PRIMARY_PAYMENT_COUNT, ANCHOR_LANGUAGES } from './config.js';
+import { CONFIG, LANG_LABELS, COVER_PILLS, PAYMENT_METHODS, PRIMARY_PAYMENT_COUNT, ANCHOR_LANGUAGES } from './config.js';
 import { Catalog } from './catalog.js';
 import { Sessions } from './sessions.js';
 import { DB } from './db.js';
@@ -560,14 +560,22 @@ export const state = sprae(document.body, {
       // Say "stack of 10", not "10 books": one tap on this row adds ten to the
       // total, and a bare book count made that jump look like a miscount.
       parts.push('stack of ' + book.books_per_unit);
-    } else if (typeof book.stock === 'number') {
-      // Depth matters: −1 is drift, −10 means the recorded stock is wrong.
-      if (book.stock < 0)       parts.push('out of stock (−' + Math.abs(book.stock) + ')');
-      else if (book.stock === 0) parts.push('out of stock');
-      else if (book.stock <= 3) parts.push('last ' + book.stock);
-      else                      parts.push(String(book.stock));
+    } else {
+      // Same reasoning for ebundles: one tap adds 2 to the total.
+      if ((book.books_per_unit || 1) > 1) parts.push('counts as ' + book.books_per_unit + ' books');
+      if (typeof book.stock === 'number') {
+        // Depth matters: −1 is drift, −10 means the recorded stock is wrong.
+        if (book.stock < 0)       parts.push('out of stock (−' + Math.abs(book.stock) + ')');
+        else if (book.stock === 0) parts.push('out of stock');
+        else if (book.stock <= 3) parts.push('last ' + book.stock);
+        else                      parts.push(String(book.stock));
+      }
     }
     return parts.join(' · ');
+  },
+
+  coverPillClass(key) {
+    return { S: 'cover-pill--soft', H: 'cover-pill--hard', A: 'cover-pill--audio', E: 'cover-pill--ebundle' }[key] || 'cover-pill--soft';
   },
 
   // Dimmed, but "+" stays live: an inaccurate stock count is recoverable,
@@ -590,14 +598,17 @@ export const state = sprae(document.body, {
         return {
           title:  e.title,
           language: lang ? this.langLabel(lang) : '',
-          // Soft and hard variants share a title, so the summary needs the same
+          // Cover variants share a title, so the summary needs the same
           // disambiguation the picker rows carry.
-          cover:  COVER_LABELS[String(e.category || '')[0]] ? COVER_LABELS[String(e.category)[0]].toUpperCase() : '',
+          coverKey: String(e.category || '')[0],
+          cover:  COVER_PILLS[String(e.category || '')[0]] || '',
           qty:    e.qty,
           per,
           books:  e.qty * per,
           points: Math.round(e.qty * (e.points_per_unit || 0) * 100) / 100,
-          isStack: per > 1,
+          // ?? covers drafts persisted before is_stack was snapshotted —
+          // those predate ebundles, so inferring from per is safe there.
+          isStack: e.is_stack ?? per > 1,
         };
       })
       .sort((a, b) => b.books - a.books);

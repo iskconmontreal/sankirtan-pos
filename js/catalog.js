@@ -3,7 +3,7 @@
    (localStorage cache fallback for offline).
 */
 
-import { CONFIG, CATEGORY_POINTS, SIZE_LABELS, SIZE_ORDER, COVER_LABELS, COVER_ORDER, LANG_ORDER } from './config.js';
+import { CONFIG, CATEGORY_POINTS, SIZE_LABELS, SIZE_ORDER, COVER_LABELS, COVER_ORDER, COVER_PILLS, LANG_ORDER } from './config.js';
 import { DB } from './db.js';
 
 // A "set" is a multi-volume boxed title. The catalog has no flag for it — the
@@ -33,11 +33,11 @@ const _flatRows = (blocks) => {
   const filled = blocks.filter(b => b.books.length > 0);
   const showPill = filled.length > 1;
   return filled
-    .flatMap(({ coverKey, label, books }) => books.map(b => ({
+    .flatMap(({ coverKey, books }) => books.map(b => ({
       ...b,
       qty: 0,
       coverKey,
-      coverPill: showPill && label ? label.toUpperCase() : '',
+      coverPill: showPill ? (COVER_PILLS[coverKey] || '') : '',
     })))
     .sort((a, b) =>
       a.title.localeCompare(b.title) ||
@@ -149,9 +149,10 @@ export const Catalog = {
       ? Catalog.books.filter(b => b.language === language)
       : Catalog.books;
 
-    const bySize = {};
-    const sets   = [];
-    const other  = {};  // coverKey → books, for titles with no scored tier
+    const bySize  = {};
+    const sets    = [];
+    const other   = {};  // coverKey → books, for titles with no scored tier
+    const digital = {};  // coverKey → books, A/E tiers
     source.forEach(book => {
       if (book.is_stack) return;  // stacks have their own group, below
       const cat = book.category || '';
@@ -163,6 +164,9 @@ export const Catalog = {
         const key = COVER_LABELS[coverKey] ? coverKey : '?';
         if (!other[key]) other[key] = [];
         other[key].push(book);
+      } else if (coverKey === 'A' || coverKey === 'E') {
+        if (!digital[coverKey]) digital[coverKey] = [];
+        digital[coverKey].push(book);
       } else {
         if (!bySize[size]) bySize[size] = {};
         if (!bySize[size][coverKey]) bySize[size][coverKey] = [];
@@ -178,9 +182,15 @@ export const Catalog = {
         label:   SIZE_LABELS[size],
         points:  CATEGORY_POINTS['S' + size] ?? 0,
         books:   _flatRows(COVER_ORDER.map(c => ({
-          coverKey: c, label: COVER_LABELS[c], books: _rows(bySize[size][c] || []),
+          coverKey: c, books: _rows(bySize[size][c] || []),
         }))),
       }));
+
+    // Digital covers span tiers 1–4, so there is no single header point value.
+    // Placed after the reorderable size groups, before the trailing blocks.
+    for (const c of ['A', 'E']) if (digital[c]) {
+      groups.push({ sizeKey: c === 'A' ? 'audio' : 'ebundle', label: COVER_LABELS[c], points: null, books: _rows(digital[c]) });
+    }
 
     // Sets (boxed multi-volume titles) — one block, no cover pill. Matched on
     // the book's own language like any other row, so the French Srimad-Bhagavatam
@@ -192,7 +202,7 @@ export const Catalog = {
     // Everything else the BBT doesn't score: excluded titles, and books still
     // waiting on a page count (S0/H0). Distributed all the same.
     const otherBooks = _flatRows([...COVER_ORDER, '?'].map(c => ({
-      coverKey: c, label: COVER_LABELS[c] || '', books: _rows(other[c] || []),
+      coverKey: c, books: _rows(other[c] || []),
     })));
     if (otherBooks.length) {
       groups.push({ sizeKey: 'other', label: 'Other titles — not scored', points: null, books: otherBooks });
@@ -220,7 +230,7 @@ export const Catalog = {
         qty: 0,
         stock: b.is_stack ? Catalog._stackStock(b) : b.stock,
         coverKey: String(b.category || '')[0],
-        coverPill: COVER_LABELS[String(b.category || '')[0]]?.toUpperCase() || '',
+        coverPill: COVER_PILLS[String(b.category || '')[0]] || '',
       }))
       .sort((a, b) => a.title.localeCompare(b.title))
       .slice(0, 40);

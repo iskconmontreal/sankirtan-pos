@@ -233,7 +233,7 @@
             <div class="book-line">
               <span class="book-title" :title="book.title" :text="book.title"></span>
               <span class="cover-pill" :if="book.coverPill"
-                    :class="book.coverKey === 'H' ? 'cover-pill--hard' : 'cover-pill--soft'"
+                    :class="coverPillClass(book.coverKey)"
                     :text="book.coverPill"></span>
             </div>
             <span class="book-meta">
@@ -282,7 +282,7 @@
               <div class="book-line">
                 <span class="book-title" :title="book.title" :text="book.title"></span>
                 <span class="cover-pill" :if="book.coverPill"
-                      :class="book.coverKey === 'H' ? 'cover-pill--hard' : 'cover-pill--soft'"
+                      :class="coverPillClass(book.coverKey)"
                       :text="book.coverPill"></span>
               </div>
               <span class="book-meta" :text="bookMeta(book)"></span>
@@ -341,7 +341,7 @@
           <div class="sum-row" :each="line in sessionLines()">
             <span class="sum-title" :title="line.title" :text="line.title"></span>
             <span class="cover-pill" :if="line.cover"
-                  :class="line.cover === 'HARD' ? 'cover-pill--hard' : 'cover-pill--soft'"
+                  :class="coverPillClass(line.coverKey)"
                   :text="line.cover"></span>
             <span class="sum-lang" :if="line.language" :text="line.language"></span>
             <span class="sum-qty" :text="line.isStack ? line.qty + ' × stack of ' + line.per : '× ' + line.qty"></span>
@@ -608,7 +608,7 @@
       <div class="sum-row" :each="line in sessionLines()">
         <span class="sum-title" :title="line.title" :text="line.title"></span>
         <span class="cover-pill" :if="line.cover"
-              :class="line.cover === 'HARD' ? 'cover-pill--hard' : 'cover-pill--soft'"
+              :class="coverPillClass(line.coverKey)"
               :text="line.cover"></span>
         <span class="sum-lang" :if="line.language" :text="line.language"></span>
         <span class="sum-qty" :text="line.isStack ? line.qty + ' × stack of ' + line.per : '× ' + line.qty"></span>
