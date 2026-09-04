@@ -98,31 +98,6 @@ function _monthRange(offset) {
   };
 }
 
-// Sessions → leaderboard rows, matching the shape of GET /leaderboard so the
-// cards, sorting and table work identically for a past month.
-function _aggregateSessions(sessions) {
-  const by = new Map();
-  for (const s of sessions) {
-    const name = s.distributor_name || '—';
-    const row = by.get(name) || {
-      distributor_name: name, distributor_id: s.distributor_id || 0,
-      books: 0, points: 0,
-      collected_cents: 0, cost_cents: 0, session_count: 0, bbt_pct: null,
-    };
-    row.books           += s.total_books || 0;
-    row.points          += s.total_points || 0;
-    row.collected_cents += s.collected_cents || 0;
-    row.cost_cents      += s.total_cost_cents || 0;
-    row.session_count   += 1;
-    by.set(name, row);
-  }
-  return [...by.values()].map(r => ({
-    ...r,
-    points:  Math.round(r.points * 100) / 100,
-    bbt_pct: r.collected_cents > 0 ? (r.cost_cents / r.collected_cents) * 100 : null,
-  }));
-}
-
 function _readView() {
   try { return localStorage.getItem(CONFIG.STORAGE_KEYS.LB_VIEW) === 'individual' ? 'individual' : 'group'; }
   catch (_) { return 'group'; }
@@ -989,16 +964,12 @@ export const state = sprae(document.body, {
     this.leaderboardLoading = true;
     this.leaderboardRows    = [];
     try {
-      // A past month has no endpoint of its own — aggregate its sessions into
-      // the same row shape the leaderboard endpoint returns.
-      let rows;
-      if (this.leaderboardPeriod === 'month' && this.monthOffset > 0) {
-        const { from, to } = _monthRange(this.monthOffset);
-        rows = _aggregateSessions(await DB.getSessions({ from, to }) || []);
-      } else {
-        rows = (await DB.getLeaderboard(this.leaderboardPeriod)).results;
-      }
-      this.leaderboardRawRows = rows;
+      // A past month goes through the same endpoint with an explicit window, so
+      // its rows are grouped by the server exactly like every other period.
+      const range = this.leaderboardPeriod === 'month' && this.monthOffset > 0
+        ? _monthRange(this.monthOffset)
+        : {};
+      this.leaderboardRawRows = (await DB.getLeaderboard(this.leaderboardPeriod, range)).results;
       this.expandedGroups     = [];
       this._applyLeaderboardView();   // derives the rows, then sorts and ranks them
     } catch (err) {

@@ -173,12 +173,13 @@ export const DB = {
     return resp.json();
   },
 
-  // GET /api/sankirtan/leaderboard?period=month
-  async getLeaderboard(period = 'month') {
-    const resp = await _request(
-      `/api/sankirtan/leaderboard?period=${encodeURIComponent(period)}`,
-      { cache: 'no-store' }
-    );
+  // GET /api/sankirtan/leaderboard?period=month — from/to narrow it to an
+  // explicit window (a past month) and take precedence over the period.
+  async getLeaderboard(period = 'month', { from, to } = {}) {
+    const params = new URLSearchParams({ period });
+    if (from) params.set('from', from);
+    if (to)   params.set('to', to);
+    const resp = await _request(`/api/sankirtan/leaderboard?${params}`, { cache: 'no-store' });
     return resp.json();
   },
 };
