@@ -69,11 +69,12 @@ export const ANCHOR_LANGUAGES = ['English', 'French', 'Spanish'];
 // several methods; the collector keys each one independently and the total is the
 // sum of them. goloka books one finance income row per method.
 // Labels carry no emoji: they rendered as inconsistent platform glyphs and added
-// nothing. `value` is what goloka stores — never change it without matching the
-// CHECK on sankirtan_session_payments.method.
+// nothing. `value` is what goloka stores — never change or add one without
+// matching the CHECK on sankirtan_session_payments.method.
 export const PAYMENT_METHODS = [
   { value: 'Cash',          label: 'Cash' },
   { value: 'Card',          label: 'Card' },
+  { value: 'Stripe',        label: 'Stripe' },
   { value: 'Interac',       label: 'Interac' },
   { value: 'Cheque',        label: 'Cheque' },
   { value: 'Bank Transfer', label: 'Bank Transfer' },

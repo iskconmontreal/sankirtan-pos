@@ -34,6 +34,18 @@ function _toCents(v) {
   return Math.round(parseFloat(v || 0) * 100) || 0;
 }
 
+// A blank amount per payment method, derived from the list so adding a method
+// needs no edit here.
+function _emptyMethodDollars() {
+  return Object.fromEntries(PAYMENT_METHODS.map(pm => [pm.value, '']));
+}
+
+// Stacks have no stock of their own and digital titles (audiobook / ebundle)
+// mint a BBT code at purchase, so neither carries a count worth showing.
+function _tracksStock(book) {
+  return !book.is_stack && !/^[AE]/.test(book.category || '') && typeof book.stock === 'number';
+}
+
 // Local calendar day for a date-ish value, as YYYY-MM-DD. occurred_at is stored
 // day-resolution (…T00:00:00Z), so compare on the date part rather than parsing
 // to a local Date, which would shift the day west of UTC.
@@ -155,7 +167,7 @@ export const state = sprae(document.body, {
   // the simple (non-split) UI is a veneer that writes the one typed amount into
   // the selected method, so submitSession's payload building is unchanged.
   paymentMethods: PAYMENT_METHODS,
-  methodDollars:  { Cash: '', Card: '', Cheque: '', Interac: '', 'Bank Transfer': '', Other: '' },
+  methodDollars:  _emptyMethodDollars(),
   collectedCents: 0,
   totalDollars:     '',
   selectedMethod:   'Cash',
@@ -320,9 +332,7 @@ export const state = sprae(document.body, {
     Sessions.setQty(book.id, newQty, book);
     this._syncTotals();
     this._saveDraft();
-    // Stacks are virtual bundles with no stock of their own (component stock is
-    // tracked server-side), so they never trigger an over-stock warning.
-    if (!book.is_stack && typeof book.stock === 'number' && newQty > book.stock) {
+    if (_tracksStock(book) && newQty > book.stock) {
       this._showToast(`Warning: "${book.title}" is over stock (${book.stock}). Distribution will still be recorded.`);
     }
   },
@@ -424,7 +434,9 @@ export const state = sprae(document.body, {
     // Restore wizard context
     this.sessionLocation = draft.sessionLocation || '';
     this.sessionNote     = draft.sessionNote     || '';
-    if (draft.methodDollars)    this.methodDollars    = draft.methodDollars;
+    // Merged over the blank map, not assigned: a draft written before a method
+    // was added would otherwise restore without that method's key.
+    if (draft.methodDollars)    this.methodDollars    = { ..._emptyMethodDollars(), ...draft.methodDollars };
     if (draft.selectedLanguage) this.selectedLanguage = draft.selectedLanguage;
     if (draft.selectedMethod)   this.selectedMethod   = draft.selectedMethod;
     this.totalDollars = draft.totalDollars || '';
@@ -452,7 +464,7 @@ export const state = sprae(document.body, {
     Sessions.setQty(book.id, qty, book);
     this._syncTotalsOnly();
     this._saveDraft();
-    if (!book.is_stack && typeof book.stock === 'number' && qty > book.stock) {
+    if (_tracksStock(book) && qty > book.stock) {
       this._showToast(`Warning: "${book.title}" is over stock (${book.stock}). Distribution will still be recorded.`);
     }
   },
@@ -538,7 +550,7 @@ export const state = sprae(document.body, {
     } else {
       // Same reasoning for ebundles: one tap adds 2 to the total.
       if ((book.books_per_unit || 1) > 1) parts.push('counts as ' + book.books_per_unit + ' books');
-      if (typeof book.stock === 'number') {
+      if (_tracksStock(book)) {
         // Depth matters: −1 is drift, −10 means the recorded stock is wrong.
         if (book.stock < 0)       parts.push('out of stock (−' + Math.abs(book.stock) + ')');
         else if (book.stock === 0) parts.push('out of stock');
@@ -556,7 +568,7 @@ export const state = sprae(document.body, {
   // Dimmed, but "+" stays live: an inaccurate stock count is recoverable,
   // a lost count is not.
   bookOut(book) {
-    return !book.is_stack && typeof book.stock === 'number' && book.stock <= 0;
+    return _tracksStock(book) && book.stock <= 0;
   },
 
   // ── Session summary ────────────────────────────────────
@@ -819,7 +831,7 @@ export const state = sprae(document.body, {
   _resetToLanding() {
     this.sessionLocation  = '';
     this.sessionNote      = '';
-    this.methodDollars    = { Cash: '', Card: '', Cheque: '', Interac: '', 'Bank Transfer': '', Other: '' };
+    this.methodDollars    = _emptyMethodDollars();
     this.collectedCents   = 0;
     this.totalDollars     = '';
     this.splitOpen        = false;

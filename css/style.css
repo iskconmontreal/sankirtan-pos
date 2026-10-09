@@ -641,9 +641,7 @@ body {
 .sum-title {
   flex: 1;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: break-word;
   font-size: 0.813rem;
   font-weight: 600;
   color: var(--c-text);
@@ -710,7 +708,7 @@ body {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--c-text);
-  flex-shrink: 0;
+  min-width: 0;
 }
 
 .book-group-pts {
@@ -763,10 +761,9 @@ body {
   gap: 1px;
 }
 
-/* Title and pill share one line, always: the title ellipsises rather than
-   letting the pill wrap below it. A phone leaves ~200px here, so a wrapping
-   pill would push every long title back to the three-line row this redesign
-   exists to remove. The full title stays available on hover/long-press. */
+/* A long title wraps to extra lines rather than ellipsising — every title must
+   read in full on a phone. The pill keeps its width and sits centered beside
+   the wrapped block. */
 .book-line {
   display: flex;
   align-items: center;
@@ -780,9 +777,7 @@ body {
   font-weight: 600;
   color: var(--c-text);
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: break-word;
 }
 
 .cover-pill {
